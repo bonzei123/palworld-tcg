@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Konto · Palworld TCG{% endblock %}
+{% block content %}
+{% if user %}
+<section class="panel account">
+    <p class="kicker">Angemeldet</p>
+    <h1>{{ user.username }}</h1>
+    <p class="lede">Sammlung und Decks sind an dieses Konto gebunden und liegen lokal in der SQLite-Datenbank.</p>
+    <form method="post" action="/konto/logout">
+        <button type="submit" class="ghost">Abmelden</button>
+    </form>
+</section>
+{% else %}
+<section class="account-grid">
+    <article class="panel">
+        <h1>Anmelden</h1>
+        {% if error and mode == 'login' %}<p class="error">{{ error }}</p>{% endif %}
+        <form method="post" action="/konto/login">
+            <input type="hidden" name="next" value="{{ next }}">
+            <label>Benutzername <input name="username" required autofocus></label>
+            <label>Passwort <input type="password" name="password" required></label>
+            <button type="submit">Anmelden</button>
+        </form>
+    </article>
+    <article class="panel">
+        <h1>Registrieren</h1>
+        <p class="muted">Sammlung und Decks hängen an diesem Konto und liegen nur lokal in der Datenbank. Ohne Anmeldung gibt es keine Sammlung.</p>
+        {% if error and mode == 'register' %}<p class="error">{{ error }}</p>{% endif %}
+        <form method="post" action="/konto/register">
+            <input type="hidden" name="next" value="{{ next }}">
+            <label>Benutzername <input name="username" required minlength="3" maxlength="32"></label>
+            <label>Passwort <input type="password" name="password" required minlength="8"></label>
+            <button type="submit">Konto anlegen</button>
+        </form>
+    </article>
+</section>
+{% endif %}
+{% endblock %}

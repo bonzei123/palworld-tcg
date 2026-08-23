@@ -1,0 +1,21 @@
+services:
+  palworld-tcg:
+    build: .
+    container_name: palworld-tcg
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      DATA_DIR: /data
+      SEED_DIR: /seed
+      ADMIN_PASSWORD: palworld
+      SECRET_KEY: change-me-on-the-nas
+      HTTPS_ONLY: "false"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s

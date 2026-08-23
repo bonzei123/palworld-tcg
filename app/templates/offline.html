@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Offline · Palworld TCG{% endblock %}
+{% block content %}
+<section class="hero">
+    <div>
+        <p class="kicker">PWA</p>
+        <h1>Offline-Katalog</h1>
+        <p class="lede">Ohne Netz siehst du den zuletzt gespeicherten Katalog. Sammlung, Decks und Chat brauchen die NAS.</p>
+    </div>
+    <input type="search" id="off-q" placeholder="Offline suchen…">
+</section>
+<p class="result-meta" id="off-meta">Lade Cache…</p>
+<section id="off-grid" class="card-grid"></section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/offline.js" defer></script>
+{% endblock %}

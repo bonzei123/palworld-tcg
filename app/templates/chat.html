@@ -1,0 +1,25 @@
+<aside id="chat-root" class="chat-root" data-open="false">
+    <button type="button" class="chat-fab" id="chat-toggle" aria-expanded="false" aria-controls="chat-panel">
+        <span class="chat-fab-orb" aria-hidden="true"></span>
+        <span class="chat-fab-label">Regeln</span>
+    </button>
+    <section id="chat-panel" class="chat-panel" hidden>
+        <header class="chat-head">
+            <div>
+                <p class="chat-kicker">Paldex Link</p>
+                <h2>Regel-Chat</h2>
+            </div>
+            <div class="chat-head-actions">
+                <button type="button" id="chat-expand" class="icon-btn" title="Größer">⛶</button>
+                <button type="button" id="chat-close" class="icon-btn" title="Schließen">✕</button>
+            </div>
+        </header>
+        <p class="chat-hint">Fragen nur zu Palworld TCG. Regeln und Kartendaten liegen lokal im Kontext.</p>
+        <div id="chat-log" class="chat-log"></div>
+        <form id="chat-form" class="chat-form">
+            <textarea id="chat-input" rows="2" placeholder="z. B. Wann darf ich Interrupt nutzen?" maxlength="4000" required></textarea>
+            <button type="submit" id="chat-send">Senden</button>
+        </form>
+    </section>
+</aside>
+<script src="/static/js/chat.js" defer></script>

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Decks · Palworld TCG{% endblock %}
+{% block content %}
+<section class="hero">
+    <div>
+        <p class="kicker">Deckbuilder</p>
+        <h1>Kostenkurve und Farbcheck.</h1>
+        <p class="lede">50 Karten, Kopie-Limits und Banlist prüft der Builder direkt. Rot = illegal.</p>
+    </div>
+    <form class="row wrap" id="new-deck">
+        <input type="text" name="name" placeholder="Deckname" maxlength="80" required>
+        <button type="submit">Neues Deck</button>
+    </form>
+</section>
+<ul class="deck-list" id="deck-list">
+    {% for d in decks %}
+    <li>
+        <a href="/decks/{{ d.id }}"><strong>{{ d.name }}</strong> <span>{{ d.cards }} Karten{% if d.can_build %} · aus der Sammlung baubar{% endif %}{% if d.legal == false %} · illegal{% endif %}</span></a>
+        <button type="button" class="ghost danger-btn" data-del="{{ d.id }}">Löschen</button>
+    </li>
+    {% else %}
+    <li class="muted">Noch kein Deck.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/decks.js" defer></script>
+{% endblock %}

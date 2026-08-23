@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ deck.name }} · Deckbuilder{% endblock %}
+{% block content %}
+<article class="deck-builder" data-deck-id="{{ deck.id }}">
+    <a class="back" href="/decks">← Decks</a>
+    <header class="row wrap">
+        <input id="deck-name" value="{{ deck.name }}" maxlength="80">
+        <button type="button" id="rename-deck" class="ghost">Umbenennen</button>
+        <span class="result-meta" id="deck-total">{{ deck.analysis.total }} / 50</span>
+        <a class="ghost" href="/decks/{{ deck.id }}/export.txt">Text / TTS</a>
+        <a class="ghost" href="/decks/{{ deck.id }}/export.json">JSON</a>
+        <a class="ghost" href="/decks/{{ deck.id }}/proxies">Proxy-Bogen</a>
+    </header>
+    <p class="banner" id="build-banner"></p>
+    <div class="deck-layout">
+        <section>
+            <h2>Karten suchen</h2>
+            <input type="search" id="deck-q" placeholder="Name oder Code…">
+            <div id="deck-search" class="search-hits"></div>
+            <h2>Liste</h2>
+            <ul class="deck-cards" id="deck-cards"></ul>
+            <h2>Import</h2>
+            <p class="muted">Textliste oder TTS-ähnlich: <code>4 EBP01-001 Grizzbolt</code></p>
+            <textarea id="import-text" rows="6" placeholder="1 EBP01-001 Name"></textarea>
+            <button type="button" id="import-deck">Liste übernehmen</button>
+            <p class="muted" id="import-status"></p>
+        </section>
+        <aside class="panel">
+            <h2>Kostenkurve</h2>
+            <div class="curve" id="curve"></div>
+            <h2>Farben</h2>
+            <ul class="color-check" id="colors"></ul>
+            <h2>Partner / Soul</h2>
+            <ul class="warn-list" id="partner-check"></ul>
+            <ul class="warn-list illegal-list" id="illegal"></ul>
+            <ul class="warn-list" id="warnings"></ul>
+            <h2>Aus der Sammlung</h2>
+            <ul class="warn-list" id="missing"></ul>
+        </aside>
+    </div>
+</article>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/deck.js" defer></script>
+{% endblock %}

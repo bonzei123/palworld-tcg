@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Admin · Palworld TCG{% endblock %}
+{% block content %}
+{% if not authed %}
+<section class="admin-login">
+    <h1>Admin</h1>
+    <p>Passwort steht in der Docker-Umgebungsvariable <code>ADMIN_PASSWORD</code> (Standard: <code>palworld</code>).</p>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <form method="post" action="/admin/login">
+        <label>Passwort
+            <input type="password" name="password" required autofocus>
+        </label>
+        <button type="submit">Anmelden</button>
+    </form>
+</section>
+{% else %}
+<section class="admin">
+    <header class="admin-head">
+        <div>
+            <p class="kicker">Steuerung</p>
+            <h1>Datenbank &amp; Import</h1>
+        </div>
+        <form method="post" action="/admin/logout"><button type="submit" class="ghost">Abmelden</button></form>
+    </header>
+
+    <nav class="tabs" id="admin-tabs">
+        <button type="button" class="is-active" data-tab="cards">Karten</button>
+        <button type="button" data-tab="import">HTML-Import</button>
+        <button type="button" data-tab="editions">Editionen</button>
+        <button type="button" data-tab="settings">Einstellungen</button>
+    </nav>
+
+    <div class="tab-panel is-active" data-panel="cards">
+        <article class="panel">
+            <div class="row wrap">
+                <input type="search" id="db-q" placeholder="Karten durchsuchen…">
+                <button type="button" id="db-new">Neue Karte</button>
+            </div>
+            <p class="result-meta" id="db-meta">{{ stats.cards }} Karten · {{ stats.images }} mit Bild</p>
+            <div class="table-wrap">
+                <table class="db-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Seltenheit</th>
+                            <th>Typ</th>
+                            <th>Edition</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="db-body"></tbody>
+                </table>
+            </div>
+            <div class="pager" id="db-pager"></div>
+        </article>
+    </div>
+
+    <div class="tab-panel" data-panel="import">
+        <article class="panel">
+            <h2>HTML-Datei importieren</h2>
+            <p>Du erstellst die HTML-Datei selbst und lädst sie hier hoch. Es wird <strong>nichts</strong> von einer Website geladen. Unterstützt werden die volle Textliste (<code>parts-thumb-txt</code>) und die Bildliste der Trial Decks (<code>image-list__item</code>). Eine Kopie landet in <code>cardlists/</code> und in <code>data/cardlists/</code>. Bilder kommen optional als ZIP mit — Dateiname = Kartencode, z.&nbsp;B. <code>EBP01-001.png</code> oder <code>ETD01-001TSP.png</code>.</p>
+            <form id="import-form">
+                <label>HTML-Datei
+                    <input type="file" name="file" accept=".html,.htm,text/html" required>
+                </label>
+                <label>Editionsname (optional)
+                    <input type="text" name="edition_name" placeholder="z. B. Booster Pack 01">
+                </label>
+                <label>Kartenbilder ZIP (optional)
+                    <input type="file" name="images_zip" accept=".zip,application/zip">
+                </label>
+                <button type="submit">Import starten</button>
+            </form>
+            <pre class="import-log" id="import-log" hidden></pre>
+        </article>
+    </div>
+
+    <div class="tab-panel" data-panel="editions">
+        <article class="panel">
+            <h2>Editionen</h2>
+            <p>{{ stats.cards }} Karten in der Datenbank.</p>
+            <ul class="edition-list" id="edition-list">
+                {% for e in stats.editions %}
+                <li>
+                    <span>{{ e.code }}</span>
+                    <input data-edition="{{ e.code }}" value="{{ e.name }}" class="edition-name">
+                    <em>{{ e.n }}</em>
+                    <button type="button" class="ghost danger-btn" data-delete-edition="{{ e.code }}">Löschen</button>
+                </li>
+                {% endfor %}
+            </ul>
+            <button type="button" id="save-editions">Namen speichern</button>
+            <p class="form-status" id="edition-status"></p>
+            <hr class="soft">
+            <h3>Alles löschen</h3>
+            <p class="warn">Entfernt alle Karten, Editionen und lokalen Bilder. Tippe <code>LÖSCHEN</code> zur Bestätigung.</p>
+            <div class="row wrap">
+                <input type="text" id="wipe-confirm" placeholder="LÖSCHEN" autocomplete="off">
+                <button type="button" id="wipe-btn" class="danger">Datenbank leeren</button>
+            </div>
+            <p class="form-status" id="wipe-status"></p>
+        </article>
+    </div>
+
+    <div class="tab-panel" data-panel="settings">
+        <div class="admin-grid">
+            <article class="panel">
+                <h2>Gemini</h2>
+                <p>API-Key nur lokal in der SQLite-Datenbank. Der Chat nutzt Regeln + Kartendaten als Kontext.</p>
+                <form id="gemini-form">
+                    <label>API-Key
+                        <input type="password" name="gemini_api_key" placeholder="{{ api_key_masked or 'AIza…' }}" autocomplete="off">
+                    </label>
+                    <label>Modell
+                        <input type="text" name="gemini_model" value="{{ model }}">
+                    </label>
+                    <div class="row">
+                        <button type="submit">Speichern</button>
+                        {% if has_key %}<button type="button" id="clear-key" class="ghost">Key löschen</button>{% endif %}
+                    </div>
+                    <p class="form-status" id="gemini-status"></p>
+                </form>
+            </article>
+            <article class="panel">
+                <h2>Regel-PDF</h2>
+                <p>Wird extrahiert und bei jeder Chat-Frage als Kontext mitgegeben.</p>
+                {% if rules %}
+                <p class="ok">Aktuell: <strong>{{ rules.filename }}</strong> · {{ rules.chars }} Zeichen · {{ rules.uploaded_at }}</p>
+                {% else %}
+                <p class="warn">Noch keine PDF hochgeladen.</p>
+                {% endif %}
+                <form id="rules-form">
+                    <input type="file" name="file" accept="application/pdf,.pdf" required>
+                    <button type="submit">PDF speichern</button>
+                    <p class="form-status" id="rules-status"></p>
+                </form>
+            </article>
+            <article class="panel">
+                <h2>Errata / Banlist</h2>
+                <p>Eigene Datei (PDF, TXT oder MD). Liegt im Chat-Kontext und gilt vor dem Regelheft, wenn sie widerspricht.</p>
+                {% if errata %}
+                <p class="ok">Aktuell: <strong>{{ errata.filename }}</strong> · {{ errata.chars }} Zeichen · {{ errata.uploaded_at }}</p>
+                {% else %}
+                <p class="warn">Noch keine Errata-Datei.</p>
+                {% endif %}
+                <form id="errata-form">
+                    <input type="file" name="file" accept=".pdf,.txt,.md,application/pdf,text/plain" required>
+                    <button type="submit">Datei speichern</button>
+                    <p class="form-status" id="errata-status"></p>
+                </form>
+            </article>
+            <article class="panel">
+                <h2>Banlist (Codes)</h2>
+                <p>Ein Code pro Zeile, z.&nbsp;B. <code>EBP01-012</code>. Gilt im Deckbuilder (rote Karte) und als Badge.</p>
+                <form id="banlist-form">
+                    <textarea name="banned_codes" rows="8" placeholder="EBP01-012">{{ banned_codes or '' }}</textarea>
+                    <button type="submit">Banlist speichern</button>
+                    <p class="form-status" id="banlist-status"></p>
+                </form>
+            </article>
+        </div>
+    </div>
+</section>
+
+<div class="modal" id="card-modal" hidden>
+    <div class="modal-card">
+        <header class="row">
+            <h2 id="modal-title">Karte</h2>
+            <button type="button" class="icon-btn" id="modal-close">✕</button>
+        </header>
+        <form id="card-form" class="card-form">
+            <input type="hidden" name="id">
+            <label>Code <input name="card_code" required></label>
+            <label>Name <input name="name" required></label>
+            <label>Seltenheit <input name="rarity"></label>
+            <label>Typ <input name="card_type" placeholder="Pal, Event, …"></label>
+            <label>Untertyp <input name="subtype"></label>
+            <label>Farbe <input name="color"></label>
+            <label>Attribute <input name="attributes" placeholder="Fire, Dragon"></label>
+            <label>Aptitudes <input name="aptitudes" placeholder="Kindling"></label>
+            <label>Cost <input name="cost" type="number"></label>
+            <label>Power <input name="power" type="number"></label>
+            <label>Strike <input name="strike" type="number"></label>
+            <label>Edition <input name="edition_code" placeholder="EBP01"></label>
+            <label>Official ID <input name="official_id" type="number"></label>
+            <label>Preis (€) <input name="price_euros" type="number" step="0.01" min="0"></label>
+            <label class="check">Gesperrt <input name="banned" type="checkbox"></label>
+            <label class="span-2">Effekt <textarea name="effect" rows="5"></textarea></label>
+            <label class="span-2">Bild ersetzen <input type="file" name="image" accept="image/*"></label>
+            <div class="row span-2">
+                <button type="submit">Speichern</button>
+                <button type="button" class="danger" id="card-delete">Karte löschen</button>
+                <p class="form-status" id="card-status"></p>
+            </div>
+        </form>
+        <p class="muted" id="modal-image"></p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if authed %}
+<script src="/static/js/admin.js" defer></script>
+{% endif %}
+{% endblock %}

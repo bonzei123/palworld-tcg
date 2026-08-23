@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ card.name }} · Palworld TCG{% endblock %}
+{% block content %}
+<article class="detail">
+    <a class="back" href="/">← Katalog</a>
+    <div class="detail-layout">
+        <figure class="detail-art rarity-{{ card.rarity|lower }}{% if card.landscape %} landscape{% endif %}">
+            {% if card.image_path %}
+            <img src="/images/{{ card.image_path }}" alt="{{ card.name }}">
+            {% else %}
+            <div class="missing-art">Kein Bild</div>
+            {% endif %}
+            <div class="badge-row">
+                {% if card.banned %}<span class="badge ban">Ban</span>{% endif %}
+                {% if card.has_errata %}<span class="badge errata">Errata</span>{% endif %}
+                {% if card.price_cents %}<span class="badge price">{{ '%.2f'|format(card.price_cents / 100) }} €</span>{% endif %}
+            </div>
+        </figure>
+        <div class="detail-body">
+            <p class="card-code">{{ card.card_code }} · {{ card.rarity or '—' }}</p>
+            <h1>{{ card.name }}</h1>
+            <ul class="stat-pills">
+                {% if card.card_type %}<li>{{ card.card_type }}</li>{% endif %}
+                {% if card.subtype %}<li>{{ card.subtype }}</li>{% endif %}
+                {% if card.color %}<li class="color-{{ card.color|lower }}">{{ card.color }}</li>{% endif %}
+                {% for a in card.attributes %}<li>{{ a }}</li>{% endfor %}
+                {% for a in card.aptitudes %}<li class="apt">≪{{ a }}≫</li>{% endfor %}
+            </ul>
+            <dl class="stat-grid">
+                {% if card.cost is not none %}<div><dt>Cost</dt><dd>{{ card.cost }}</dd></div>{% endif %}
+                {% if card.power is not none %}<div><dt>Power</dt><dd>{{ card.power }}</dd></div>{% endif %}
+                {% if card.strike is not none %}<div><dt>Strike</dt><dd>{{ card.strike }}</dd></div>{% endif %}
+                {% if card.edition_code %}<div><dt>Edition</dt><dd>{{ card.edition_code }}</dd></div>{% endif %}
+                {% if card.copy_limit %}<div><dt>Kopien</dt><dd>max. {{ card.copy_limit }}</dd></div>{% endif %}
+            </dl>
+            {% if card.effect %}
+            <section class="effect">
+                <h2>Effekt</h2>
+                <pre>{{ card.effect }}</pre>
+            </section>
+            {% endif %}
+            {% if user %}
+            <section class="qty-panel" data-collection="{{ card.id }}">
+                <h2>Sammlung</h2>
+                <div class="qty-row">
+                    <label>Habe ich <input type="number" min="0" max="99" value="{{ card.owned or 0 }}" data-owned></label>
+                    <label>Brauche ich <input type="number" min="0" max="99" value="{{ card.wanted or 0 }}" data-wanted></label>
+                    <label>Zustand
+                        <select data-condition>
+                            {% for c in conditions %}
+                            <option value="{{ c }}" {% if (card.condition or 'NM') == c %}selected{% endif %}>{{ c }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>Lagerort <input type="text" value="{{ card.location or '' }}" data-location placeholder="Binder A"></label>
+                    <label class="check"><input type="checkbox" data-trade {% if card.for_trade %}checked{% endif %}> Tausch</label>
+                    <button type="button" data-save-qty>Speichern</button>
+                </div>
+                <p class="muted" data-qty-status></p>
+            </section>
+            <section class="qty-panel" data-notes="{{ card.id }}">
+                <h2>Notizen &amp; Tags</h2>
+                <div class="tag-row" id="tag-row">
+                    {% for t in tag_presets %}
+                    <label class="check"><input type="checkbox" value="{{ t }}" {% if t in notes.tags %}checked{% endif %}> {{ t }}</label>
+                    {% endfor %}
+                </div>
+                <textarea data-card-notes rows="3" placeholder="Eigene Notiz…">{{ notes.notes }}</textarea>
+                <button type="button" data-save-notes>Notizen speichern</button>
+                <p class="muted" data-notes-status></p>
+            </section>
+            {% else %}
+            <p class="muted"><a href="/konto?next=/card/{{ card.id }}">Anmelden</a>, um Besitz und Bedarf zu speichern.</p>
+            {% endif %}
+            {% if family %}
+            <section>
+                <h2>Pal-Linie / Drucke</h2>
+                <p><a href="/compare/{{ card.id }}">Seltenheiten vergleichen</a></p>
+                <div class="variant-row">
+                    {% for v in family %}
+                    <a class="variant{% if v.landscape %} landscape{% endif %}" href="/card/{{ v.id }}">
+                        {% if v.image_path %}
+                        <img src="/images/{{ v.image_path }}" alt="{{ v.rarity }}">
+                        {% endif %}
+                        <span>{{ v.card_code }} · {{ v.rarity }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </section>
+            {% elif variants %}
+            <section>
+                <h2>Andere Seltenheiten</h2>
+                <p><a href="/compare/{{ card.id }}">RR / OSR / SSP vergleichen</a></p>
+                <div class="variant-row">
+                    {% for v in variants %}
+                    <a class="variant{% if v.landscape %} landscape{% endif %}" href="/card/{{ v.id }}">
+                        {% if v.image_path %}
+                        <img src="/images/{{ v.image_path }}" alt="{{ v.rarity }}">
+                        {% endif %}
+                        <span>{{ v.card_code }} · {{ v.rarity }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+        </div>
+    </div>
+</article>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/collection.js" defer></script>
+{% endblock %}

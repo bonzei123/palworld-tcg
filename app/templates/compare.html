@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Vergleich {{ name }} · Palworld TCG{% endblock %}
+{% block content %}
+<article class="detail">
+    <a class="back" href="/card/{{ cards[0].id }}">← {{ name }}</a>
+    <p class="kicker">Druck-Vergleich</p>
+    <h1>{{ name }}</h1>
+    <p class="lede">Alle Printings derselben Karte nebeneinander — z.&nbsp;B. RR, OSR, SSP.</p>
+    <div class="compare-grid">
+        {% for c in cards %}
+        <article class="compare-card{% if c.landscape %} landscape{% endif %}">
+            <figure>
+                {% if c.image_path %}
+                <img src="/images/{{ c.image_path }}" alt="{{ c.rarity }}">
+                {% else %}
+                <div class="missing-art">Kein Bild</div>
+                {% endif %}
+            </figure>
+            <p class="card-code">{{ c.card_code }} · {{ c.rarity or '—' }}</p>
+            <p>{{ c.edition_code }} · {{ c.card_type or '' }}</p>
+            {% if user %}
+            <p class="muted">Habe {{ c.owned or 0 }} · brauche {{ c.wanted or 0 }}</p>
+            {% endif %}
+            <a href="/card/{{ c.id }}">Details</a>
+        </article>
+        {% endfor %}
+    </div>
+</article>
+{% endblock %}

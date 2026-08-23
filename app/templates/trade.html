@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Tausch · Palworld TCG{% endblock %}
+{% block content %}
+<section class="hero">
+    <div>
+        <p class="kicker">Zwischen Konten</p>
+        <h1>Wunsch- und Tauschliste.</h1>
+        <p class="lede">Treffer, wenn jemand eine Karte anbietet, die du brauchst — oder umgekehrt. Markiere Karten in der Sammlung als Tausch.</p>
+    </div>
+    <a class="ghost" href="/sammlung">Zur Sammlung</a>
+</section>
+{% if board %}
+{% for row in board %}
+<article class="panel trade-card">
+    <h2>{{ row.username }}</h2>
+    {% if row.they_offer %}
+    <h3>Die bieten dir an</h3>
+    <ul class="mini-cards">
+        {% for c in row.they_offer %}
+        <li><a href="/card/{{ c.id }}">{{ c.card_code }} · {{ c.name }}</a></li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% if row.they_want %}
+    <h3>Die wollen von dir</h3>
+    <ul class="mini-cards">
+        {% for c in row.they_want %}
+        <li><a href="/card/{{ c.id }}">{{ c.card_code }} · {{ c.name }}</a></li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</article>
+{% endfor %}
+{% else %}
+<p class="muted">Noch keine Treffer. Lege Wunschlisten an und markiere Dubletten als Tausch — braucht mindestens ein zweites Konto.</p>
+{% endif %}
+{% endblock %}

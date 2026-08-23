@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <title>Proxies · {{ deck.name }}</title>
+    <style>
+        @page { size: A4; margin: 8mm; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Segoe UI, sans-serif; background: #fff; color: #111; }
+        header { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px 12px; }
+        h1 { font-size: 1rem; margin: 0; }
+        .sheet {
+            display: grid;
+            grid-template-columns: repeat(3, 63mm);
+            grid-auto-rows: 88mm;
+            gap: 2mm;
+            justify-content: center;
+        }
+        .proxy {
+            width: 63mm;
+            height: 88mm;
+            border: 0.3mm solid #333;
+            overflow: hidden;
+            page-break-inside: avoid;
+            position: relative;
+            background: #111;
+        }
+        .proxy.landscape { width: 88mm; height: 63mm; }
+        .proxy img { width: 100%; height: 100%; object-fit: contain; display: block; }
+        .proxy .fallback {
+            padding: 8px;
+            color: #fff;
+            font-size: 11px;
+        }
+        @media screen {
+            body { background: #1a2420; color: #e7f4ea; padding: 1rem; }
+            header a { color: #7dffb3; }
+            .sheet { background: #fff; padding: 8mm; border-radius: 8px; }
+        }
+        @media print {
+            header .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>{{ deck.name }} · {{ copies|length }} Karten</h1>
+        <a class="no-print" href="/decks/{{ deck.id }}">← Deck</a>
+        <button class="no-print" type="button" onclick="window.print()">Drucken</button>
+    </header>
+    <div class="sheet">
+        {% for c in copies %}
+        <div class="proxy{% if c.landscape %} landscape{% endif %}">
+            {% if c.image_url %}
+            <img src="{{ c.image_url }}" alt="{{ c.name }}">
+            {% else %}
+            <div class="fallback">{{ c.card_code }}<br>{{ c.name }}<br>{{ c.rarity }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</body>
+</html>

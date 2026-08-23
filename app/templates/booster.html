@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Booster · Palworld TCG{% endblock %}
+{% block content %}
+<section class="hero">
+    <div>
+        <p class="kicker">Zum Spaß</p>
+        <h1>Zufälliger Booster.</h1>
+        <p class="lede">Kein offizielles Pack-Odds-Modell — ein seltener Hit plus Filler aus der gewählten Edition.</p>
+    </div>
+    <form class="row wrap" method="get" action="/booster">
+        <select name="edition">
+            {% for code in pack.editions %}
+            <option value="{{ code }}" {% if code == pack.edition %}selected{% endif %}>{{ code }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Neues Pack</button>
+    </form>
+</section>
+<p class="result-meta">{{ pack.edition or 'Alle Editionen' }}</p>
+<section class="card-grid booster-grid">
+    {% for c in pack.cards %}
+    <a class="card-tile{% if c.landscape %} landscape{% endif %}" href="/card/{{ c.id }}">
+        {% if c.image_url %}
+        <img src="{{ c.image_url }}" alt="{{ c.name }}">
+        {% else %}
+        <div class="missing">Kein Bild</div>
+        {% endif %}
+        <div class="meta">
+            <span>{{ c.card_code }}</span>
+            <strong>{{ c.name }}</strong>
+            <span>{{ c.rarity }}</span>
+        </div>
+    </a>
+    {% else %}
+    <p class="empty">Keine Karten in dieser Edition.</p>
+    {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{% block title %}Palworld TCG{% endblock %}</title>
+    <meta name="theme-color" content="#0c1210" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#0c1210">
+    <meta name="color-scheme" content="dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="PalTCG">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
+    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/img/icon-512.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <div class="grain" aria-hidden="true"></div>
+    <header class="topbar">
+        <a class="brand" href="/">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>
+                <strong>Palworld TCG</strong>
+                <small>Lokaler Kartenkatalog</small>
+            </span>
+        </a>
+        <nav class="desk-nav" aria-label="Hauptmenü">
+            <a href="/" class="{% if request.url.path == '/' %}is-active{% endif %}">Karten</a>
+            <a href="/sammlung" class="{% if request.url.path.startswith('/sammlung') %}is-active{% endif %}">Sammlung</a>
+            <a href="/decks" class="{% if request.url.path.startswith('/decks') %}is-active{% endif %}">Decks</a>
+            <a href="/tausch" class="{% if request.url.path.startswith('/tausch') %}is-active{% endif %}">Tausch</a>
+            <a href="/booster" class="{% if request.url.path.startswith('/booster') %}is-active{% endif %}">Booster</a>
+            {% if user %}
+            <a href="/konto" class="{% if request.url.path.startswith('/konto') %}is-active{% endif %}">{{ user.username }}</a>
+            {% else %}
+            <a href="/konto" class="{% if request.url.path.startswith('/konto') %}is-active{% endif %}">Konto</a>
+            {% endif %}
+            <a href="/admin" class="{% if request.url.path.startswith('/admin') %}is-active{% endif %}">Admin</a>
+        </nav>
+        <a class="header-admin {% if request.url.path.startswith('/admin') %}is-active{% endif %}" href="/admin" title="Admin">Admin</a>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <nav class="tabbar" aria-label="App-Navigation">
+        <a href="/" class="{% if request.url.path == '/' %}is-active{% endif %}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="10" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/><rect x="3" y="16" width="7" height="4" rx="1.5"/></svg>
+            <span>Karten</span>
+        </a>
+        <a href="/sammlung" class="{% if request.url.path.startswith('/sammlung') %}is-active{% endif %}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12H4z"/><path d="M8 7V5h8v2"/></svg>
+            <span>Sammlung</span>
+        </a>
+        <a href="/decks" class="{% if request.url.path.startswith('/decks') %}is-active{% endif %}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10l3 16H4z"/><path d="M9 10h6M8 14h8"/></svg>
+            <span>Decks</span>
+        </a>
+        <a href="/konto" class="{% if request.url.path.startswith('/konto') %}is-active{% endif %}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c1.5-3.2 4-5 7-5s5.5 1.8 7 5"/></svg>
+            <span>{% if user %}Konto{% else %}Login{% endif %}</span>
+        </a>
+        <button type="button" class="tab-chat" id="tab-chat" aria-controls="chat-panel">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14v10H8l-3 3z"/></svg>
+            <span>Regeln</span>
+        </button>
+    </nav>
+    {% include "chat.html" %}
+    {% block scripts %}{% endblock %}
+    <script src="/static/js/ui.js" defer></script>
+    <script>
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("/sw.js").catch(() => {});
+        }
+    </script>
+</body>
+</html>

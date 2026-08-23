@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Karten · Palworld TCG{% endblock %}
+{% block content %}
+<section class="hero">
+    <div>
+        <p class="kicker">{{ stats.editions }} Edition{{ 'en' if stats.editions != 1 else '' }} · {{ stats.cards }} Karten</p>
+        <h1>Finde jede Karte, jede Seltenheit.</h1>
+        <p class="lede">Alle Karten nach Edition und Nummer. Die Suche filtert in Echtzeit über Name, Code, Effekt, Typ und Werte.</p>
+    </div>
+</section>
+<form class="searchbar sticky-search" id="search-form" role="search">
+    <input type="search" id="q" name="q" placeholder="Live-Suche: Name, Code, Effekt, Aptitude…" autocomplete="off" enterkeyhint="search">
+    <button type="submit">Filtern</button>
+</form>
+<button type="button" class="filter-toggle" id="filter-toggle" aria-expanded="false" aria-controls="filters">
+    Filter <span id="filter-count"></span>
+</button>
+<section class="filters" id="filters">
+    <label>Typ
+        <select id="f-type">
+            <option value="">Alle</option>
+            {% for t in filters.types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+        </select>
+    </label>
+    <label>Farbe
+        <select id="f-color">
+            <option value="">Alle</option>
+            {% for c in filters.colors %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+    </label>
+    <label>Seltenheit
+        <select id="f-rarity">
+            <option value="">Alle</option>
+            {% for r in filters.rarities %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+        </select>
+    </label>
+    <label>Edition
+        <select id="f-edition">
+            <option value="">Alle</option>
+            {% for e in filters.editions %}<option value="{{ e.code }}">{{ e.code }}{% if e.name and e.name != e.code %} · {{ e.name }}{% endif %}</option>{% endfor %}
+        </select>
+    </label>
+    <label>Attribut
+        <select id="f-attribute">
+            <option value="">Alle</option>
+            {% for a in filters.attributes %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+        </select>
+    </label>
+    <label>Aptitude
+        <select id="f-aptitude">
+            <option value="">Alle</option>
+            {% for a in filters.aptitudes %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+        </select>
+    </label>
+    {% if user %}
+    <label>Sammlung
+        <select id="f-have">
+            <option value="">Alle</option>
+            <option value="owned">Habe ich</option>
+            <option value="wanted">Brauche ich</option>
+            <option value="missing">Nicht im Besitz</option>
+        </select>
+    </label>
+    {% endif %}
+    <label>Sortierung
+        <select id="f-sort">
+            <option value="">Edition / Nummer</option>
+            <option value="price">Preis (teuer zuerst)</option>
+        </select>
+    </label>
+</section>
+<p class="result-meta" id="result-meta"></p>
+<section id="grid" class="card-grid" aria-live="polite"></section>
+<div class="pager" id="pager"></div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/app.js" defer></script>
+{% endblock %}
