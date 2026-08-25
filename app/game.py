@@ -35,10 +35,23 @@ def pal_line(name: str | None) -> str:
     return parts[0].strip()
 
 
-def copy_limit(card: dict[str, Any]) -> int:
+COLORLESS = {"", "colorless", "farblos", "none", "null", "-", "—"}
+
+
+def is_soul(card: dict[str, Any]) -> bool:
     kind = (card.get("card_type") or "").strip().lower()
-    if kind == "soul":
-        return 1
+    name = (card.get("name") or "").strip().lower()
+    return kind == "soul" or name == "soul"
+
+
+def is_colorless(color: str | None) -> bool:
+    return (color or "").strip().casefold() in COLORLESS
+
+
+def copy_limit(card: dict[str, Any]) -> int:
+    if is_soul(card):
+        return 10
+    kind = (card.get("card_type") or "").strip().lower()
     if kind == "energy":
         return 99
     return 4
@@ -73,6 +86,44 @@ def errata_text() -> str:
     with get_db() as conn:
         row = conn.execute("SELECT text FROM errata WHERE id = 1").fetchone()
     return (row["text"] or "") if row else ""
+
+
+def errata_excerpt(card: dict[str, Any], errata: str | None = None) -> str:
+    errata = errata if errata is not None else errata_text()
+    if not errata:
+        return ""
+    needles = []
+    full = (card.get("card_code") or "").strip()
+    code = base_code(card.get("card_code"))
+    name = (card.get("name") or "").strip()
+    if full:
+        needles.append(full)
+    if code and code.casefold() != full.casefold():
+        needles.append(code)
+    if name:
+        needles.append(name)
+    lower = errata.casefold()
+    idx = -1
+    matched_len = 0
+    for needle in needles:
+        if not needle:
+            continue
+        pos = lower.find(needle.casefold())
+        if pos >= 0:
+            idx = pos
+            matched_len = len(needle)
+            break
+    if idx < 0:
+        return ""
+    start = errata.rfind("\n\n", 0, idx)
+    start = 0 if start < 0 else start + 2
+    end = errata.find("\n\n", idx + matched_len)
+    if end < 0:
+        end = min(len(errata), idx + 700)
+    snippet = errata[start:end].strip()
+    if len(snippet) > 900:
+        snippet = snippet[:900].rsplit(" ", 1)[0] + "…"
+    return snippet
 
 
 def card_flags(card: dict[str, Any], banned: set[str] | None = None, errata: str | None = None) -> dict[str, Any]:
@@ -147,10 +198,10 @@ def owned_by_base(user_id: int) -> dict[str, int]:
 
 
 def analyze_deck(cards: list[dict[str, Any]], user_id: int | None = None) -> dict[str, Any]:
-    total = sum(int(c.get("qty") or 0) for c in cards)
     colors: Counter[str] = Counter()
     costs: Counter[int] = Counter()
     by_base: Counter[str] = Counter()
+    total = 0
     souls = 0
     lucky_names: set[str] = set()
     banned = banned_codes()
@@ -163,16 +214,19 @@ def analyze_deck(cards: list[dict[str, Any]], user_id: int | None = None) -> dic
         qty = int(card.get("qty") or 0)
         flags = card_flags(card, banned, errata)
         card.update(flags)
-        color = (card.get("color") or "Farblos").strip() or "Farblos"
-        colors[color] += qty
-        cost = card.get("cost")
-        bucket = 10 if cost is None or cost >= 10 else max(0, int(cost))
-        costs[bucket] += qty
+        soul = is_soul(card)
+        card["is_soul"] = soul
+        color = (card.get("color") or "").strip() or "Colorless"
+        if soul:
+            souls += qty
+        else:
+            total += qty
+            colors[color] += qty
+            cost = card.get("cost")
+            bucket = 10 if cost is None or cost >= 10 else max(0, int(cost))
+            costs[bucket] += qty
         code = flags["base_code"]
         by_base[code] += qty
-        kind = (card.get("card_type") or "").lower()
-        if kind == "soul":
-            souls += qty
         if is_lucky(card):
             lucky_names.add(pal_line(card.get("name")) or card.get("name") or code)
         have = owned.get(code, 0)
@@ -205,16 +259,20 @@ def analyze_deck(cards: list[dict[str, Any]], user_id: int | None = None) -> dic
         if n > limit:
             illegal.append(f"{code}: {n} Kopien über alle Drucke (max. {limit})")
 
+    chromatic = [name for name in colors if not is_colorless(name)]
     warnings: list[str] = []
     if total and total < 50:
-        warnings.append(f"Nur {total} Karten — Palworld-Decks sind üblicherweise 50 Karten.")
+        warnings.append(f"Nur {total} Karten im Deck — Palworld-Decks sind 50 Karten plus 10 Souls.")
     if total > 50:
-        warnings.append(f"{total} Karten — über dem üblichen 50er-Limit.")
-    if len([c for c in colors if c != "Farblos"]) > 2:
-        warnings.append("Mehr als zwei Farben: Energy und Splash prüfen.")
-    if souls > 1:
-        warnings.append(f"{souls} Soul-Karten — üblich ist 1 Soul.")
-        illegal.append("Mehr als 1 Soul")
+        warnings.append(f"{total} Karten im Deck — über dem 50er-Limit (Souls zählen extra).")
+        illegal.append("Mehr als 50 Karten im Hauptdeck")
+    if souls != 10:
+        warnings.append(f"Soul-Stack: {souls} / 10.")
+    if souls > 10:
+        illegal.append("Mehr als 10 Souls")
+    if len(chromatic) > 2:
+        warnings.append("Maximal zwei Farben plus Colorless.")
+        illegal.append("Mehr als zwei Farben (Colorless zählt nicht)")
     if len(lucky_names) > 1:
         warnings.append("Mehrere Lucky/Partner-Pals: " + ", ".join(sorted(lucky_names)))
 
@@ -234,8 +292,8 @@ def analyze_deck(cards: list[dict[str, Any]], user_id: int | None = None) -> dic
         "can_build": can_build,
         "souls": souls,
         "lucky_pals": sorted(lucky_names),
-        "color_ok": len([c for c in colors if c != "Farblos"]) <= 2,
-        "legal": not illegal and total <= 50,
+        "color_ok": len(chromatic) <= 2,
+        "legal": not illegal,
     }
 
 
@@ -245,7 +303,21 @@ def set_progress(user_id: int) -> list[dict[str, Any]]:
         owned_ids = {
             int(r["card_id"])
             for r in conn.execute(
-                "SELECT card_id FROM collection WHERE user_id = ? AND owned > 0",
+                "SELECT DISTINCT card_id FROM collection WHERE user_id = ? AND owned > 0",
+                (user_id,),
+            ).fetchall()
+        }
+        copies = {
+            int(r["edition_id"]): int(r["n"] or 0)
+            for r in conn.execute(
+                """
+                SELECT cards.edition_id, SUM(collection.owned) AS n
+                FROM collection
+                JOIN cards ON cards.id = collection.card_id
+                WHERE collection.user_id = ? AND collection.owned > 0
+                  AND cards.edition_id IS NOT NULL
+                GROUP BY cards.edition_id
+                """,
                 (user_id,),
             ).fetchall()
         }
@@ -264,6 +336,7 @@ def set_progress(user_id: int) -> list[dict[str, Any]]:
             "name": ed["name"],
             "total": 0,
             "have": 0,
+            "copies": copies.get(int(ed["id"]), 0),
             "missing": 0,
             "gaps": [],
         }
@@ -387,20 +460,29 @@ def trade_board(user_id: int) -> list[dict[str, Any]]:
 
 
 def add_pull(
-    user_id: int, card_id: int, source: str, qty: int = 1, *, increment: bool = True
+    user_id: int,
+    card_id: int,
+    source: str,
+    qty: int = 1,
+    *,
+    increment: bool = True,
+    foil: Any = 0,
 ) -> dict[str, Any]:
+    from .player import as_foil
+
     qty = max(1, min(36, int(qty)))
     source = (source or "").strip()[:80] or "Display"
+    foil_n = as_foil(foil)
     with get_db() as conn:
         if not conn.execute("SELECT id FROM cards WHERE id = ?", (card_id,)).fetchone():
             raise KeyError("card")
         conn.execute(
-            "INSERT INTO pulls(user_id, card_id, source, qty) VALUES (?, ?, ?, ?)",
-            (user_id, card_id, source, qty),
+            "INSERT INTO pulls(user_id, card_id, source, qty, foil) VALUES (?, ?, ?, ?, ?)",
+            (user_id, card_id, source, qty, foil_n),
         )
         row = conn.execute(
-            "SELECT owned, wanted FROM collection WHERE user_id = ? AND card_id = ?",
-            (user_id, card_id),
+            "SELECT owned, wanted FROM collection WHERE user_id = ? AND card_id = ? AND foil = ?",
+            (user_id, card_id, foil_n),
         ).fetchone()
         owned = int(row["owned"] if row else 0)
         wanted = int(row["wanted"] if row else 0)
@@ -408,13 +490,13 @@ def add_pull(
             owned += qty
             conn.execute(
                 """
-                INSERT INTO collection(user_id, card_id, owned, wanted)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(user_id, card_id) DO UPDATE SET owned = excluded.owned
+                INSERT INTO collection(user_id, card_id, foil, owned, wanted)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, card_id, foil) DO UPDATE SET owned = excluded.owned
                 """,
-                (user_id, card_id, owned, wanted),
+                (user_id, card_id, foil_n, owned, wanted),
             )
-    return {"ok": True, "owned": owned, "source": source}
+    return {"ok": True, "owned": owned, "source": source, "foil": bool(foil_n)}
 
 
 def list_pulls(user_id: int) -> list[dict[str, Any]]:
@@ -422,6 +504,7 @@ def list_pulls(user_id: int) -> list[dict[str, Any]]:
         rows = conn.execute(
             """
             SELECT pulls.id, pulls.source, pulls.qty, pulls.created_at,
+                   IFNULL(pulls.foil, 0) AS foil,
                    cards.id AS card_id, cards.card_code, cards.name, cards.rarity,
                    cards.image_path
             FROM pulls
@@ -435,6 +518,7 @@ def list_pulls(user_id: int) -> list[dict[str, Any]]:
     items = []
     for row in rows:
         item = dict(row)
+        item["foil"] = bool(row["foil"])
         item["image_url"] = "/images/" + row["image_path"].replace("\\", "/") if row["image_path"] else None
         items.append(item)
     return items
@@ -532,23 +616,26 @@ def random_booster(edition: str | None = None, count: int = 10) -> dict[str, Any
 def deck_text(deck: dict[str, Any]) -> str:
     lines = [f"# {deck.get('name') or 'Deck'}"]
     for card in deck.get("cards") or []:
-        lines.append(f"{card.get('qty') or 1} {card.get('card_code')} {card.get('name')}")
+        foil = " (Foil)" if card.get("foil") else ""
+        lines.append(f"{card.get('qty') or 1} {card.get('card_code')} {card.get('name')}{foil}")
     return "\n".join(lines) + "\n"
 
 
 def parse_deck_text(text: str) -> list[dict[str, Any]]:
-    items: list[dict[str, str | int]] = []
+    items: list[dict[str, str | int | bool]] = []
     for raw in (text or "").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
+        foil = bool(re.search(r"\(foil\)|\*foil\*|✦", line, re.I))
+        line = re.sub(r"\s*(\(foil\)|\*foil\*)\s*", " ", line, flags=re.I).strip()
         m = re.match(r"^(?:(\d+)\s*[x×]?\s+)?([A-Z0-9]+-\d+[A-Z]*)(?:\s+.*)?$", line, re.I)
         if m:
-            items.append({"qty": int(m.group(1) or 1), "card_code": m.group(2).upper()})
+            items.append({"qty": int(m.group(1) or 1), "card_code": m.group(2).upper(), "foil": foil})
             continue
         m = re.match(r"^(\d+)\s+(.+)$", line)
         if m:
-            items.append({"qty": int(m.group(1)), "name": m.group(2).strip()})
+            items.append({"qty": int(m.group(1)), "name": m.group(2).strip(), "foil": foil})
     return items
 
 
@@ -576,11 +663,12 @@ def apply_deck_import(user_id: int, deck_id: int, items: list[dict[str, Any]]) -
             if not row:
                 continue
             qty = max(1, min(99, int(item.get("qty") or 1)))
+            foil = 1 if item.get("foil") else 0
             conn.execute(
                 """
-                INSERT INTO deck_cards(deck_id, card_id, qty) VALUES (?, ?, ?)
-                ON CONFLICT(deck_id, card_id) DO UPDATE SET qty = qty + excluded.qty
+                INSERT INTO deck_cards(deck_id, card_id, foil, qty) VALUES (?, ?, ?, ?)
+                ON CONFLICT(deck_id, card_id, foil) DO UPDATE SET qty = qty + excluded.qty
                 """,
-                (deck_id, int(row["id"]), qty),
+                (deck_id, int(row["id"]), foil, qty),
             )
         conn.execute("UPDATE decks SET updated_at = datetime('now') WHERE id = ?", (deck_id,))

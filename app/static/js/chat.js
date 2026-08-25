@@ -77,12 +77,21 @@ function renderMarkdown(src) {
     return text.replace(/\u0000F(\d+)\u0000/g, (_, i) => fences[Number(i)]);
 }
 
+function linkCardCodes(html) {
+    return html.replace(/(^|>)([^<]+)/g, (full, prefix, text) => {
+        const linked = text.replace(/\b([A-Z]{2,}\d{2}-\d{3}[A-Z]*)\b/gi, (code) => (
+            `<button type="button" class="card-code-link" data-card-code="${code.toUpperCase()}">${code}</button>`
+        ));
+        return prefix + linked;
+    });
+}
+
 function addMsg(role, text, asMarkdown) {
     const el = document.createElement("div");
     el.className = "msg " + role;
     if (role === "bot" && asMarkdown) {
         el.classList.add("md");
-        el.innerHTML = renderMarkdown(text);
+        el.innerHTML = linkCardCodes(renderMarkdown(text));
     } else {
         el.textContent = text;
     }
@@ -116,7 +125,7 @@ form.addEventListener("submit", async (e) => {
             let body = data.text || "";
             if (data.cached) body += "\n\n*(Cache — kein Tokenverbrauch)*";
             pending.classList.add("md");
-            pending.innerHTML = renderMarkdown(body);
+            pending.innerHTML = linkCardCodes(renderMarkdown(body));
             history.push({ role: "model", content: data.text });
         }
     } catch (err) {

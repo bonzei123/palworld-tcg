@@ -20,8 +20,16 @@
 <section class="panel" id="set-progress">
     <h2>Set-Fortschritt</h2>
     <p class="muted" id="value-line">Sammelwert erscheint, sobald Preise hinterlegt sind.</p>
+    <div class="row wrap" id="price-sync-row">
+        <p class="muted" id="sync-line"></p>
+        {% if is_admin %}
+        <button type="button" class="ghost" id="sync-prices">Preise aktualisieren</button>
+        {% endif %}
+    </div>
+    <p class="muted" id="sync-status"></p>
     <ul class="progress-list" id="progress-list"></ul>
-    <h3>Teure Lücken</h3>
+    <h3>Preis vs Haben</h3>
+    <p class="muted">Teuerste Lücken — Karten mit Preis, die noch nicht in der Sammlung sind.</p>
     <ul class="gap-list" id="gap-list"></ul>
 </section>
 
@@ -31,6 +39,7 @@
     <form class="row wrap" id="add-code">
         <input type="text" name="code" placeholder="EBP01-012" required autocomplete="off">
         <input type="number" name="owned" min="1" max="36" value="1" title="Anzahl">
+        <label class="check"><input type="checkbox" name="foil"> Foil</label>
         <input type="text" name="source" placeholder="Display / Quelle (optional)">
         <button type="submit">Hinzufügen</button>
     </form>
@@ -44,6 +53,23 @@
     <button type="button" data-status="need">Brauche ich</button>
     <button type="button" data-status="missing">Fehlend</button>
 </nav>
+<div class="row wrap coll-filters" id="coll-filters">
+    <label>Lagerort
+        <select id="f-location">
+            <option value="">Alle</option>
+        </select>
+    </label>
+    <label>Zustand
+        <select id="f-condition">
+            <option value="">Alle</option>
+            <option value="NM">NM</option>
+            <option value="LP">LP</option>
+            <option value="MP">MP</option>
+            <option value="HP">HP</option>
+            <option value="Played">Played</option>
+        </select>
+    </label>
+</div>
 <div class="table-wrap">
     <table class="db-table" id="coll-table">
         <thead>
@@ -52,6 +78,7 @@
                 <th>Karte</th>
                 <th>Habe</th>
                 <th>Brauche</th>
+                <th>Foil</th>
                 <th>Zustand</th>
                 <th>Ort</th>
                 <th>Tausch</th>

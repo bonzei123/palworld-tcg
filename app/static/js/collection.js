@@ -5,7 +5,7 @@ function esc(value) {
 }
 
 function euro(cents) {
-    if (!cents) return "";
+    if (cents == null || cents === "") return "";
     return (Number(cents) / 100).toFixed(2) + " €";
 }
 
@@ -17,23 +17,6 @@ async function saveQty(cardId, payload) {
     });
     return res.json();
 }
-
-document.querySelectorAll("[data-collection]").forEach((panel) => {
-    const btn = panel.querySelector("[data-save-qty]");
-    if (!btn) return;
-    btn.addEventListener("click", async () => {
-        const id = panel.getAttribute("data-collection");
-        const status = panel.querySelector("[data-qty-status]");
-        const data = await saveQty(id, {
-            owned: Number(panel.querySelector("[data-owned]").value || 0),
-            wanted: Number(panel.querySelector("[data-wanted]").value || 0),
-            condition: panel.querySelector("[data-condition]")?.value,
-            location: panel.querySelector("[data-location]")?.value,
-            for_trade: panel.querySelector("[data-trade]")?.checked || false,
-        });
-        if (status) status.textContent = data.ok ? "Gespeichert." : "Fehler.";
-    });
-});
 
 document.querySelectorAll("[data-notes]").forEach((panel) => {
     const btn = panel.querySelector("[data-save-notes]");
@@ -53,13 +36,40 @@ document.querySelectorAll("[data-notes]").forEach((panel) => {
 
 const body = document.getElementById("coll-body");
 if (body) {
-    let status = "";
+    const url = new URLSearchParams(location.search);
+    let status = url.get("status") || "";
+    let locationFilter = url.get("location") || "";
+    let conditionFilter = url.get("condition") || "";
     const summary = document.getElementById("summary-line");
     const conds = ["NM", "LP", "MP", "HP", "Played"];
+    const locSel = document.getElementById("f-location");
+    const condSel = document.getElementById("f-condition");
+
+    if (condSel && conditionFilter) condSel.value = conditionFilter;
+    document.querySelectorAll("#coll-tabs button").forEach((b) => {
+        b.classList.toggle("is-active", (b.dataset.status || "") === status);
+    });
+
+    function syncCollUrl() {
+        const u = new URLSearchParams();
+        if (status) u.set("status", status);
+        if (locationFilter) u.set("location", locationFilter);
+        if (conditionFilter) u.set("condition", conditionFilter);
+        const qs = u.toString();
+        history.replaceState(null, "", qs ? ("/sammlung?" + qs) : "/sammlung");
+    }
 
     function renderSummary(s) {
         if (!summary || !s) return;
         summary.textContent = `${s.have} im Besitz · ${s.owned} Exemplare · ${s.missing} fehlend · ${s.wanted} gewünscht`;
+    }
+
+    function fillLocations(locations) {
+        if (!locSel) return;
+        const current = locationFilter;
+        locSel.innerHTML = `<option value="">Alle</option>` + (locations || []).map((loc) => (
+            `<option value="${esc(loc)}"${loc === current ? " selected" : ""}>${esc(loc)}</option>`
+        )).join("");
     }
 
     async function loadProgress() {
@@ -70,27 +80,58 @@ if (body) {
         const valueLine = document.getElementById("value-line");
         if (valueLine) {
             valueLine.textContent = value.cents
-                ? `Sammelwert (Cache): ${euro(value.cents)} · ${value.priced || 0} Karten mit Preis`
-                : "Sammelwert erscheint, sobald im Admin Preise stehen.";
+                ? `Sammelwert: ${euro(value.cents)} · ${value.priced || 0} Karten mit Preis`
+                : "Sammelwert erscheint, sobald Preise hinterlegt sind.";
         }
+        const syncLine = document.getElementById("sync-line");
+        if (syncLine) {
+            const info = data.prices_sync || {};
+            syncLine.textContent = data.prices_synced_at
+                ? `Letzter Preisabgleich: ${data.prices_synced_at}`
+                    + (info.updated != null ? ` · ${info.updated} aktualisiert, ${info.skipped || 0} ohne Treffer` : "")
+                : "Noch kein Preisabgleich.";
+        }
+        const syncBtn = document.getElementById("sync-prices");
+        if (syncBtn) syncBtn.hidden = !data.is_admin;
         const list = document.getElementById("progress-list");
         if (list) {
             list.innerHTML = (data.sets || []).map((ed) => `
                 <li>
-                    <strong>${esc(ed.code)}</strong>
-                    <span>${ed.have}/${ed.total}</span>
-                    <span class="muted">${ed.missing ? "von " + esc(ed.code) + " fehlen noch " + ed.missing : "vollständig"}</span>
-                    <div class="bar"><i style="width:${ed.total ? Math.round(100 * ed.have / ed.total) : 0}%"></i></div>
+                    <a class="progress-link" href="/?edition=${encodeURIComponent(ed.code)}&have=missing">
+                        <strong>${esc(ed.code)}</strong>
+                        <span>${ed.have}/${ed.total}${ed.copies ? " (" + ed.copies + ")" : ""}</span>
+                        <span class="muted">${ed.missing ? "von " + esc(ed.code) + " fehlen noch " + ed.missing : "vollständig"}</span>
+                        <div class="bar"><i style="width:${ed.total ? Math.round(100 * ed.have / ed.total) : 0}%"></i></div>
+                    </a>
                 </li>
             `).join("") || "<li class='muted'>Keine Editionen.</li>";
         }
         const gaps = document.getElementById("gap-list");
         if (gaps) {
             gaps.innerHTML = (data.gaps || []).map((c) => `
-                <li><a href="/card/${c.id}">${esc(c.card_code)} · ${esc(c.name)}</a> <span>${euro(c.price_cents)}</span></li>
+                <li class="gap-row">
+                    <a href="/card/${c.id}">${esc(c.card_code)} · ${esc(c.name)}</a>
+                    <span class="gap-have">nicht im Besitz</span>
+                    <span class="gap-price">${euro(c.price_cents)}</span>
+                </li>
             `).join("") || "<li class='muted'>Keine Preise — Lücken ohne Wertung.</li>";
         }
     }
+
+    document.getElementById("sync-prices")?.addEventListener("click", async () => {
+        const statusEl = document.getElementById("sync-status");
+        if (statusEl) statusEl.textContent = "Preise werden geholt…";
+        const res = await fetch("/api/admin/prices/sync", { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            if (statusEl) statusEl.textContent = data.detail || "Abgleich fehlgeschlagen (Admin-Sitzung nötig).";
+            return;
+        }
+        if (statusEl) {
+            statusEl.textContent = `Aktualisiert: ${data.updated || 0} · übersprungen: ${data.skipped || 0} · offiziell: ${data.official || 0}`;
+        }
+        loadProgress();
+    });
 
     async function loadPulls() {
         const res = await fetch("/api/pulls");
@@ -99,30 +140,38 @@ if (body) {
         const list = document.getElementById("pull-list");
         if (!list) return;
         list.innerHTML = (data.items || []).map((p) => `
-            <li>${esc(p.qty)}× <a href="/card/${p.card_id}">${esc(p.card_code)} ${esc(p.name)}</a> · ${esc(p.source)} <span class="muted">${esc(p.created_at || "")}</span></li>
+            <li>${esc(p.qty)}× <a href="/card/${p.card_id}">${esc(p.card_code)} ${esc(p.name)}</a>
+                ${p.foil ? ' <span class="badge foil">Foil</span>' : ""}
+                · ${esc(p.source)} <span class="muted">${esc(p.created_at || "")}</span></li>
         `).join("") || "<li class='muted'>Noch keine Pulls.</li>";
     }
 
     async function loadCollection() {
-        const res = await fetch("/api/collection?status=" + encodeURIComponent(status));
+        const u = new URLSearchParams();
+        if (status) u.set("status", status);
+        if (locationFilter) u.set("location", locationFilter);
+        if (conditionFilter) u.set("condition", conditionFilter);
+        const res = await fetch("/api/collection?" + u.toString());
         if (res.status === 401) {
             location.href = "/konto?next=/sammlung";
             return;
         }
         const data = await res.json();
         renderSummary(data.summary);
+        fillLocations(data.locations || []);
         body.innerHTML = data.items.map((c) => `
-            <tr data-id="${c.id}">
+            <tr data-id="${c.id}" data-foil="${c.foil ? 1 : 0}" data-card-id="${c.id}" data-hover="${esc(c.image_url || "")}">
                 <td data-label="">${c.image_url ? `<img src="${esc(c.image_url)}" alt="" width="36"${c.landscape ? ' class="landscape"' : ""}>` : ""}</td>
-                <td data-label="Karte"><a href="/card/${c.id}"><strong>${esc(c.name)}</strong></a><br><code>${esc(c.card_code)}</code> · ${esc(c.rarity)}${c.banned ? ' <span class="badge ban">Ban</span>' : ""}${c.has_errata ? ' <span class="badge errata">Errata</span>' : ""}</td>
+                <td data-label="Karte"><a href="/card/${c.id}" data-card-id="${c.id}" data-hover="${esc(c.image_url || "")}"><strong>${esc(c.name)}</strong></a><br><code>${esc(c.card_code)}</code> · ${esc(c.rarity)}${c.foil ? ' <span class="badge foil">Foil</span>' : ""}${c.banned ? ' <span class="badge ban">Ban</span>' : ""}${c.has_errata ? ' <span class="badge errata">Errata</span>' : ""}</td>
                 <td data-label="Habe"><input type="number" min="0" max="99" value="${c.owned || 0}" data-owned></td>
                 <td data-label="Brauche"><input type="number" min="0" max="99" value="${c.wanted || 0}" data-wanted></td>
+                <td data-label="Foil"><input type="checkbox" data-row-foil ${c.foil ? "checked" : ""} disabled></td>
                 <td data-label="Zustand"><select data-condition>${conds.map((x) => `<option${(c.condition || "NM") === x ? " selected" : ""}>${x}</option>`).join("")}</select></td>
                 <td data-label="Ort"><input type="text" value="${esc(c.location || "")}" data-location></td>
                 <td data-label="Tausch"><input type="checkbox" data-trade ${c.for_trade ? "checked" : ""}></td>
                 <td data-label=""><button type="button" class="ghost" data-save>OK</button></td>
             </tr>
-        `).join("") || `<tr><td colspan="8">Keine Einträge. Code oben eintragen oder im Katalog Besitz setzen.</td></tr>`;
+        `).join("") || `<tr><td colspan="9">Keine Einträge. Code oben eintragen oder im Katalog Besitz setzen.</td></tr>`;
     }
 
     document.getElementById("coll-tabs")?.addEventListener("click", (e) => {
@@ -130,6 +179,17 @@ if (body) {
         if (!btn) return;
         status = btn.dataset.status;
         document.querySelectorAll("#coll-tabs button").forEach((b) => b.classList.toggle("is-active", b === btn));
+        syncCollUrl();
+        loadCollection();
+    });
+    locSel?.addEventListener("change", () => {
+        locationFilter = locSel.value;
+        syncCollUrl();
+        loadCollection();
+    });
+    condSel?.addEventListener("change", () => {
+        conditionFilter = condSel.value;
+        syncCollUrl();
         loadCollection();
     });
 
@@ -143,6 +203,7 @@ if (body) {
             condition: tr.querySelector("[data-condition]").value,
             location: tr.querySelector("[data-location]").value,
             for_trade: tr.querySelector("[data-trade]").checked,
+            foil: Number(tr.dataset.foil || 0),
         });
         loadCollection();
         loadProgress();
@@ -176,6 +237,7 @@ if (body) {
             pickGrid.dataset.code = payload.code;
             pickGrid.dataset.owned = payload.owned;
             pickGrid.dataset.source = payload.source || "";
+            pickGrid.dataset.foil = payload.foil ? "1" : "";
             return;
         }
         pickGrid.hidden = true;
@@ -193,6 +255,7 @@ if (body) {
             code: String(fd.get("code") || "").trim(),
             owned: Number(fd.get("owned") || 1),
             source: String(fd.get("source") || "").trim(),
+            foil: fd.get("foil") === "on",
         });
     });
 
@@ -204,6 +267,7 @@ if (body) {
             owned: Number(pickGrid.dataset.owned || 1),
             source: pickGrid.dataset.source || "",
             card_id: Number(btn.dataset.pick),
+            foil: pickGrid.dataset.foil === "1",
         });
     });
 

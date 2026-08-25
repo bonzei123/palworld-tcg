@@ -17,7 +17,7 @@
     <link rel="apple-touch-icon" href="/static/img/icon-512.png">
     <link rel="manifest" href="/manifest.webmanifest">
 </head>
-<body class="{% block body_class %}{% endblock %}">
+<body class="{% block body_class %}{% endblock %}" data-auth="{{ 1 if user else 0 }}">
     <div class="grain" aria-hidden="true"></div>
     <header class="topbar">
         <a class="brand" href="/">
@@ -31,6 +31,7 @@
             <a href="/" class="{% if request.url.path == '/' %}is-active{% endif %}">Karten</a>
             <a href="/sammlung" class="{% if request.url.path.startswith('/sammlung') %}is-active{% endif %}">Sammlung</a>
             <a href="/decks" class="{% if request.url.path.startswith('/decks') %}is-active{% endif %}">Decks</a>
+            <a href="/glossar" class="{% if request.url.path.startswith('/glossar') %}is-active{% endif %}">Glossar</a>
             <a href="/tausch" class="{% if request.url.path.startswith('/tausch') %}is-active{% endif %}">Tausch</a>
             <a href="/booster" class="{% if request.url.path.startswith('/booster') %}is-active{% endif %}">Booster</a>
             {% if user %}
@@ -68,8 +69,26 @@
         </button>
     </nav>
     {% include "chat.html" %}
-    {% block scripts %}{% endblock %}
+    <div class="modal card-view-modal" id="card-view-modal" hidden>
+        <div class="modal-card card-view" role="dialog" aria-modal="true" aria-labelledby="card-view-title">
+            <header>
+                <button type="button" class="ghost" id="card-view-back" hidden>Zur vorigen Karte</button>
+                <h2 id="card-view-title">Karte</h2>
+                <button type="button" class="icon-btn" id="card-view-close" aria-label="Schließen">✕</button>
+            </header>
+            <div id="card-view-body"></div>
+        </div>
+    </div>
+    <div class="card-hover" id="card-hover" hidden>
+        <img alt="">
+    </div>
+    <div class="card-loupe" id="card-loupe" hidden></div>
+    <div class="kw-tip" id="kw-tip" hidden>
+        <strong id="kw-tip-title"></strong>
+        <p id="kw-tip-body"></p>
+    </div>
     <script src="/static/js/ui.js" defer></script>
+    {% block scripts %}{% endblock %}
     <script>
         if ("serviceWorker" in navigator) {
             navigator.serviceWorker.register("/sw.js").catch(() => {});

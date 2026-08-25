@@ -19,6 +19,26 @@
         <div class="detail-body">
             <p class="card-code">{{ card.card_code }} · {{ card.rarity or '—' }}</p>
             <h1>{{ card.name }}</h1>
+            {% if user %}
+            <p class="have-chip" data-have-chip data-card-id="{{ card.id }}">
+                {% if (card.owned or 0) > 0 %}
+                {{ card.owned }}× in der Sammlung{% if card.owned_foil %} · {{ card.owned_foil }} Foil{% endif %}
+                {% else %}
+                Nicht in der Sammlung
+                {% endif %}
+            </p>
+            {% else %}
+            <p class="muted"><a href="/konto?next=/card/{{ card.id }}">Anmelden</a>, um Besitz zu sehen und Karten hinzuzufügen.</p>
+            {% endif %}
+            {% if card.price_cents is not none or card.price_7d_cents is not none or card.price_30d_cents is not none %}
+            <p class="price-line">
+                {% if card.price_cents is not none %}Aktuell {{ '%.2f'|format(card.price_cents / 100) }} €{% endif %}
+                {% if card.price_7d_cents is not none %} · 7 Tage {{ '%.2f'|format(card.price_7d_cents / 100) }} €{% endif %}
+                {% if card.price_30d_cents is not none %} · 30 Tage {{ '%.2f'|format(card.price_30d_cents / 100) }} €{% endif %}
+                {% if card.price_7d_swing is not none %} · Swing {{ '%.1f'|format(card.price_7d_swing) }}%{% elif card.price_daily_swing is not none %} · Swing {{ '%.1f'|format(card.price_daily_swing) }}%{% endif %}
+                {% if card.active_listing_count %} · {{ card.active_listing_count }} Angebote{% endif %}
+            </p>
+            {% endif %}
             <ul class="stat-pills">
                 {% if card.card_type %}<li>{{ card.card_type }}</li>{% endif %}
                 {% if card.subtype %}<li>{{ card.subtype }}</li>{% endif %}
@@ -36,14 +56,38 @@
             {% if card.effect %}
             <section class="effect">
                 <h2>Effekt</h2>
-                <pre>{{ card.effect }}</pre>
+                <pre>{{ card.effect | effect_icons }}</pre>
+                {% if card.has_errata and card.errata_excerpt %}
+                <aside class="errata-excerpt">
+                    <strong>Errata</strong>
+                    <pre>{{ card.errata_excerpt }}</pre>
+                </aside>
+                {% endif %}
             </section>
+            {% elif card.has_errata and card.errata_excerpt %}
+            <aside class="errata-excerpt">
+                <strong>Errata</strong>
+                <pre>{{ card.errata_excerpt }}</pre>
+            </aside>
             {% endif %}
             {% if user %}
             <section class="qty-panel" data-collection="{{ card.id }}">
-                <h2>Sammlung</h2>
+                <div class="qty-head">
+                    <h2>Sammlung</h2>
+                    <p class="have-line" data-have-line>
+                        {% if (card.owned or 0) > 0 %}
+                        Im Besitz: {{ card.owned }} ({{ card.owned_normal or 0 }} normal, {{ card.owned_foil or 0 }} Foil)
+                        {% else %}
+                        Noch nicht in der Sammlung.
+                        {% endif %}
+                    </p>
+                </div>
                 <div class="qty-row">
-                    <label>Habe ich <input type="number" min="0" max="99" value="{{ card.owned or 0 }}" data-owned></label>
+                    <label>Habe ich <input type="number" min="0" max="99" value="{{ card.owned_normal or 0 }}" data-owned></label>
+                    <button type="button" class="ghost" data-add-copy="0">+1</button>
+                    <label class="check"><input type="checkbox" data-foil {% if card.owned_foil %}checked{% endif %}> Foil</label>
+                    <label>Anzahl Foil <input type="number" min="0" max="99" value="{{ card.owned_foil or 0 }}" data-owned-foil></label>
+                    <button type="button" class="ghost" data-add-copy="1">+1 Foil</button>
                     <label>Brauche ich <input type="number" min="0" max="99" value="{{ card.wanted or 0 }}" data-wanted></label>
                     <label>Zustand
                         <select data-condition>
@@ -58,6 +102,8 @@
                 </div>
                 <p class="muted" data-qty-status></p>
             </section>
+            {% endif %}
+            {% if user %}
             <section class="qty-panel" data-notes="{{ card.id }}">
                 <h2>Notizen &amp; Tags</h2>
                 <div class="tag-row" id="tag-row">

@@ -34,6 +34,7 @@ from .game import (
     CONDITIONS,
     TAG_PRESETS,
     attach_flags,
+    errata_excerpt,
     pal_family,
     save_banlist,
     user_notes,
@@ -55,10 +56,12 @@ from .db import (
     wipe_catalog,
 )
 from .importer import archive_cardlist, attach_images_from_zip, import_cards
+from .texticons import render_effect
 
 APP_DIR = Path(__file__).resolve().parent
 ensure_dirs()
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
+templates.env.filters["effect_icons"] = render_effect
 
 app = FastAPI(title="Palworld TCG", docs_url=None, redoc_url=None)
 app.add_middleware(
@@ -73,7 +76,13 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 def page(request: Request, name: str, **ctx: Any) -> HTMLResponse:
     return templates.TemplateResponse(
-        name, {"request": request, "user": current_user(request), **ctx}
+        name,
+        {
+            "request": request,
+            "user": current_user(request),
+            "is_admin": bool(request.session.get("admin")),
+            **ctx,
+        },
     )
 
 
@@ -207,6 +216,32 @@ def index(request: Request) -> HTMLResponse:
     return page(request, "index.html", stats=stats, filters=filters)
 
 
+@app.get("/glossar", response_class=HTMLResponse)
+def glossar_page(request: Request) -> HTMLResponse:
+    from markupsafe import Markup, escape
+
+    from .keywords import ICON_KEYS, KEYWORDS, wrap_icon
+
+    items = []
+    for key, info in KEYWORDS.items():
+        if key in ICON_KEYS:
+            inner = Markup(
+                f'<img src="/static/img/{key}.png" alt="" class="kw-img" width="28" height="28"> '
+                f"{escape(info['title'])}"
+            )
+        else:
+            inner = Markup(escape(info["title"]))
+        items.append(
+            {
+                "key": key,
+                "title": info["title"],
+                "tip": info["tip"],
+                "title_html": wrap_icon(inner, key),
+            }
+        )
+    return page(request, "glossar.html", keywords=items)
+
+
 @app.get("/card/{card_id}", response_class=HTMLResponse)
 def card_page(request: Request, card_id: int) -> HTMLResponse:
     with get_db() as conn:
@@ -236,6 +271,7 @@ def card_page(request: Request, card_id: int) -> HTMLResponse:
             ).fetchall()
         ]
     attach_flags([card])
+    card["errata_excerpt"] = errata_excerpt(card) if card.get("has_errata") else ""
     user = current_user(request)
     notes = {"notes": "", "tags": []}
     if user:
@@ -302,7 +338,10 @@ def admin_page(request: Request) -> HTMLResponse:
             ],
         }
         banned_codes = get_setting(conn, "banned_codes") or ""
+        pw_id = get_setting(conn, "palworldcard_identity") or ""
+        prices_synced_at = get_setting(conn, "prices_synced_at") or ""
     masked = (key[:4] + "…" + key[-4:]) if len(key) > 10 else ("••••" if key else "")
+    pw_masked = (pw_id[:2] + "…" + pw_id[-4:]) if len(pw_id) > 8 else ("••••" if pw_id else "")
     return page(
         request,
         "admin.html",
@@ -315,6 +354,9 @@ def admin_page(request: Request) -> HTMLResponse:
         errata=dict(errata) if errata else None,
         stats=stats,
         banned_codes=banned_codes,
+        palworldcard_identity_masked=pw_masked,
+        has_palworldcard=bool(pw_id),
+        prices_synced_at=prices_synced_at,
     )
 
 
@@ -413,15 +455,43 @@ def api_cards(
                 "AND collection.user_id = ? AND collection.owned > 0)"
             )
             params.append(user["id"])
+        elif have == "foil":
+            where.append(
+                "EXISTS (SELECT 1 FROM collection WHERE collection.card_id = cards.id "
+                "AND collection.user_id = ? AND collection.foil = 1 AND collection.owned > 0)"
+            )
+            params.append(user["id"])
+        elif have == "incomplete":
+            where.append(
+                """IFNULL((
+                    SELECT SUM(collection.owned) FROM collection
+                    WHERE collection.card_id = cards.id AND collection.user_id = ?
+                ), 0) < CASE
+                    WHEN LOWER(TRIM(IFNULL(cards.card_type,''))) = 'soul'
+                      OR LOWER(TRIM(IFNULL(cards.name,''))) = 'soul' THEN 10
+                    WHEN LOWER(TRIM(IFNULL(cards.card_type,''))) = 'energy' THEN 99
+                    ELSE 4
+                END"""
+            )
+            params.append(user["id"])
 
     fts = _fts_query(q)
     with get_db() as conn:
         join = "LEFT JOIN editions ON editions.id = cards.edition_id"
-        order = (
-            "ORDER BY IFNULL(cards.price_cents, 0) DESC, IFNULL(editions.code, 'ZZZ') COLLATE NOCASE, cards.card_code COLLATE NOCASE, cards.id"
-            if sort == "price"
-            else CARD_ORDER
-        )
+        if sort == "price":
+            order = (
+                "ORDER BY IFNULL(cards.price_cents, 0) DESC, IFNULL(editions.code, 'ZZZ') COLLATE NOCASE, "
+                "cards.card_code COLLATE NOCASE, cards.id"
+            )
+        elif sort == "rarity":
+            order = (
+                "ORDER BY cards.rarity COLLATE NOCASE, IFNULL(editions.code, 'ZZZ') COLLATE NOCASE, "
+                "cards.card_code COLLATE NOCASE, cards.id"
+            )
+        elif sort == "name":
+            order = "ORDER BY cards.name COLLATE NOCASE, cards.card_code COLLATE NOCASE, cards.id"
+        else:
+            order = CARD_ORDER
         if fts:
             try:
                 ids = [
@@ -485,6 +555,20 @@ def api_card(request: Request, card_id: int) -> dict[str, Any]:
     user = current_user(request)
     if user:
         attach_collection([card], user["id"])
+    card["effect_html"] = str(render_effect(card.get("effect")))
+    card["errata_excerpt"] = errata_excerpt(card) if card.get("has_errata") else ""
+    family = [c for c in pal_family(card_id) if c["id"] != card_id]
+    card["family"] = [
+        {
+            "id": c["id"],
+            "name": c.get("name"),
+            "card_code": c.get("card_code"),
+            "rarity": c.get("rarity"),
+            "image_url": c.get("image_url"),
+            "landscape": c.get("landscape"),
+        }
+        for c in family
+    ]
     return card
 
 
@@ -509,7 +593,33 @@ async def admin_settings(request: Request):
             )
         if "banned_codes" in body:
             save_banlist(str(body.get("banned_codes") or ""))
+        if body.get("clear_palworldcard"):
+            set_setting(conn, "palworldcard_identity", None)
+            set_setting(conn, "palworldcard_password", None)
+        else:
+            if "palworldcard_identity" in body:
+                ident = (body.get("palworldcard_identity") or "").strip()
+                if ident:
+                    set_setting(conn, "palworldcard_identity", ident)
+            if "palworldcard_password" in body:
+                pwd = body.get("palworldcard_password") or ""
+                if str(pwd).strip():
+                    set_setting(conn, "palworldcard_password", str(pwd))
     return {"ok": True}
+
+
+@app.post("/api/admin/prices/sync")
+def admin_price_sync(request: Request):
+    _require_admin(request)
+    from .prices import sync_official_prices
+
+    try:
+        summary = sync_official_prices()
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from None
+    except Exception as exc:
+        raise HTTPException(502, f"Preisabgleich fehlgeschlagen: {exc}") from None
+    return {"ok": True, **summary}
 
 
 @app.post("/api/admin/import")

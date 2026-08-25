@@ -1,9 +1,13 @@
-const CACHE = "palworld-tcg-v1";
+const CACHE = "palworld-tcg-v10";
 const PRECACHE = [
   "/",
   "/offline",
+  "/glossar",
   "/static/css/app.css",
   "/static/js/app.js",
+  "/static/js/ui.js",
+  "/static/js/collection.js",
+  "/static/js/deck.js",
   "/static/js/chat.js",
   "/static/js/offline.js",
   "/static/img/favicon.svg",
@@ -28,11 +32,25 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+function networkFirst(req) {
+  return fetch(req).then((res) => {
+    if (res.ok) {
+      const copy = res.clone();
+      caches.open(CACHE).then((cache) => cache.put(req, copy));
+    }
+    return res;
+  }).catch(() => caches.match(req));
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  if (url.pathname.startsWith("/api/chat") || url.pathname.startsWith("/api/collection") || url.pathname.startsWith("/api/decks") || url.pathname.startsWith("/admin") || url.pathname.startsWith("/konto")) {
+  if (url.pathname.startsWith("/api/chat") || url.pathname.startsWith("/admin") || url.pathname.startsWith("/konto")) {
+    return;
+  }
+  if (url.pathname.startsWith("/api/collection") || url.pathname.startsWith("/api/decks")) {
+    event.respondWith(networkFirst(req));
     return;
   }
   if (url.pathname.startsWith("/static/") || url.pathname.startsWith("/images/") || url.pathname === "/api/catalog.json") {
@@ -52,7 +70,7 @@ self.addEventListener("fetch", (event) => {
   }
   event.respondWith(
     fetch(req).then((res) => {
-      if (res.ok && (url.pathname === "/" || url.pathname.startsWith("/card/"))) {
+      if (res.ok && (url.pathname === "/" || url.pathname.startsWith("/card/") || url.pathname === "/glossar")) {
         const copy = res.clone();
         caches.open(CACHE).then((cache) => cache.put(req, copy));
       }

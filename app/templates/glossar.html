@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Glossar · Palworld TCG{% endblock %}
+{% block content %}
+<section class="hero">
+    <div>
+        <p class="kicker">Regeln</p>
+        <h1>Glossar</h1>
+        <p class="lede">Schlüsselwörter und Zeitpunkte. Tipps gelten für das Pocketpair Official Card Game.</p>
+    </div>
+</section>
+<ul class="glossary-list">
+    {% for item in keywords %}
+    <li class="glossary-item">
+        <h2>{{ item.title_html }}</h2>
+        <p>{{ item.tip }}</p>
+    </li>
+    {% endfor %}
+</ul>
+{% endblock %}

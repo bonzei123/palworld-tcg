@@ -160,6 +160,24 @@
                     <p class="form-status" id="banlist-status"></p>
                 </form>
             </article>
+            <article class="panel">
+                <h2>Palworldcard-Preise</h2>
+                <p>Zugangsdaten nur in der lokalen Datenbank. Der Abgleich holt offizielle Marktpreise und schreibt sie in den Katalog. Kein automatischer Abruf beim Laden.</p>
+                {% if prices_synced_at %}<p class="ok">Letzter Abgleich: {{ prices_synced_at }}</p>{% endif %}
+                <form id="palworldcard-form">
+                    <label>E-Mail / Login
+                        <input type="text" name="palworldcard_identity" placeholder="{{ palworldcard_identity_masked or 'konto@…' }}" autocomplete="off">
+                    </label>
+                    <label>Passwort
+                        <input type="password" name="palworldcard_password" placeholder="{% if has_palworldcard %}•••• gespeichert{% else %}Passwort{% endif %}" autocomplete="new-password">
+                    </label>
+                    <div class="row">
+                        <button type="submit">Zugangsdaten speichern</button>
+                        {% if has_palworldcard %}<button type="button" id="clear-palworldcard" class="ghost">Zugangsdaten löschen</button>{% endif %}
+                    </div>
+                    <p class="form-status" id="palworldcard-status"></p>
+                </form>
+            </article>
         </div>
     </div>
 </section>

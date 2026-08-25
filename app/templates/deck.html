@@ -6,7 +6,7 @@
     <header class="row wrap">
         <input id="deck-name" value="{{ deck.name }}" maxlength="80">
         <button type="button" id="rename-deck" class="ghost">Umbenennen</button>
-        <span class="result-meta" id="deck-total">{{ deck.analysis.total }} / 50</span>
+        <span class="result-meta" id="deck-total">{{ deck.analysis.total }} / 50 · Soul {{ deck.analysis.souls }} / 10</span>
         <a class="ghost" href="/decks/{{ deck.id }}/export.txt">Text / TTS</a>
         <a class="ghost" href="/decks/{{ deck.id }}/export.json">JSON</a>
         <a class="ghost" href="/decks/{{ deck.id }}/proxies">Proxy-Bogen</a>
@@ -16,9 +16,13 @@
         <section>
             <h2>Karten suchen</h2>
             <input type="search" id="deck-q" placeholder="Name oder Code…">
+            <label class="check deck-foil-add"><input type="checkbox" id="deck-foil"> Neue Karten als Foil</label>
+            <p class="muted">Karten hierher oder in die Liste ziehen, um sie hinzuzufügen.</p>
             <div id="deck-search" class="search-hits"></div>
-            <h2>Liste</h2>
+            <h2>Deck <span class="muted">50 Karten</span></h2>
             <ul class="deck-cards" id="deck-cards"></ul>
+            <h2>Soul-Stack <span class="muted">10 Souls</span></h2>
+            <ul class="deck-cards" id="deck-souls"></ul>
             <h2>Import</h2>
             <p class="muted">Textliste oder TTS-ähnlich: <code>4 EBP01-001 Grizzbolt</code></p>
             <textarea id="import-text" rows="6" placeholder="1 EBP01-001 Name"></textarea>
@@ -34,7 +38,8 @@
             <ul class="warn-list" id="partner-check"></ul>
             <ul class="warn-list illegal-list" id="illegal"></ul>
             <ul class="warn-list" id="warnings"></ul>
-            <h2>Aus der Sammlung</h2>
+            <h2>Kann ich das bauen?</h2>
+            <button type="button" class="ghost" id="wish-all">Fehlende auf die Wunschliste</button>
             <ul class="warn-list" id="missing"></ul>
         </aside>
     </div>

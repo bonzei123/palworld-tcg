@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -7,10 +8,13 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from .auth import current_user, login_user, register_user, require_user
+from .db import get_db, get_setting
 from .player import (
-    collection_map,
+    as_foil,
+    collection_locations,
     collection_rows,
     collection_summary,
+    collection_variant,
     create_deck,
     delete_deck,
     export_collection_csv,
@@ -46,7 +50,13 @@ from .game import (
 def register_player_routes(app, templates: Jinja2Templates) -> None:
     def page(request: Request, name: str, **ctx: Any):
         return templates.TemplateResponse(
-            name, {"request": request, "user": current_user(request), **ctx}
+            name,
+            {
+                "request": request,
+                "user": current_user(request),
+                "is_admin": bool(request.session.get("admin")),
+                **ctx,
+            },
         )
 
     @app.get("/konto")
@@ -107,12 +117,21 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
         return page(request, "collection.html", summary=collection_summary(user["id"]))
 
     @app.get("/api/collection")
-    def api_collection(request: Request, status: str = ""):
+    def api_collection(
+        request: Request, status: str = "", location: str = "", condition: str = ""
+    ):
         user = require_user(request)
         if status not in {"", "have", "need", "missing"}:
             status = ""
-        items = collection_rows(user["id"], status)
-        return {"items": items, "summary": collection_summary(user["id"]), "status": status}
+        items = collection_rows(user["id"], status, location, condition)
+        return {
+            "items": items,
+            "summary": collection_summary(user["id"]),
+            "status": status,
+            "location": location,
+            "condition": condition,
+            "locations": collection_locations(user["id"]),
+        }
 
     @app.put("/api/collection/{card_id}")
     async def api_collection_set(request: Request, card_id: int):
@@ -124,6 +143,7 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
                 card_id,
                 body.get("owned"),
                 body.get("wanted"),
+                foil=body.get("foil"),
                 condition=body.get("condition"),
                 location=body.get("location"),
                 for_trade=body.get("for_trade"),
@@ -208,7 +228,13 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
         user = require_user(request)
         body = await request.json()
         try:
-            deck = set_deck_card(user["id"], deck_id, card_id, int(body.get("qty") or 0))
+            deck = set_deck_card(
+                user["id"],
+                deck_id,
+                card_id,
+                int(body.get("qty") or 0),
+                foil=body.get("foil"),
+            )
         except KeyError:
             raise HTTPException(404, "Karte nicht gefunden") from None
         if not deck:
@@ -268,6 +294,7 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
                     "card_code": c.get("card_code"),
                     "name": c.get("name"),
                     "rarity": c.get("rarity"),
+                    "foil": bool(c.get("foil")),
                 }
                 for c in deck.get("cards") or []
             ],
@@ -292,10 +319,20 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
     @app.get("/api/collection/progress")
     def api_progress(request: Request):
         user = require_user(request)
+        with get_db() as conn:
+            synced = get_setting(conn, "prices_synced_at")
+            raw = get_setting(conn, "prices_sync_summary") or "{}"
+        try:
+            sync_info = json.loads(raw)
+        except json.JSONDecodeError:
+            sync_info = {}
         return {
             "sets": set_progress(user["id"]),
             "value": collection_value(user["id"]),
             "gaps": expensive_gaps(user["id"]),
+            "prices_synced_at": synced,
+            "prices_sync": sync_info,
+            "is_admin": bool(request.session.get("admin")),
         }
 
     @app.get("/api/lookup")
@@ -313,11 +350,12 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
             return {"ok": False, "need_pick": True, "items": matches}
         card_id = int(body.get("card_id") or matches[0]["id"])
         qty = max(1, min(99, int(body.get("owned") or 1)))
-        prev = collection_map(user["id"]).get(card_id, {})
-        rec = set_collection(user["id"], card_id, int(prev.get("owned") or 0) + qty, None)
+        foil = as_foil(body.get("foil"))
+        prev = collection_variant(user["id"], card_id, foil)
+        rec = set_collection(user["id"], card_id, int(prev.get("owned") or 0) + qty, None, foil=foil)
         source = str(body.get("source") or "").strip()
         if source:
-            add_pull(user["id"], card_id, source, qty, increment=False)
+            add_pull(user["id"], card_id, source, qty, increment=False, foil=foil)
         return {"ok": True, **rec, "card": next((c for c in matches if c["id"] == card_id), matches[0])}
 
     @app.post("/api/pulls")
@@ -330,6 +368,7 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
                 int(body.get("card_id")),
                 str(body.get("source") or ""),
                 int(body.get("qty") or 1),
+                foil=body.get("foil"),
             )
         except (KeyError, TypeError, ValueError):
             raise HTTPException(400, "Karte oder Display fehlt.") from None

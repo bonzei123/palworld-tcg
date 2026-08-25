@@ -307,3 +307,35 @@ document.getElementById("card-delete").addEventListener("click", async () => {
 });
 
 loadDb();
+
+const pwForm = document.getElementById("palworldcard-form");
+if (pwForm) {
+    pwForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fd = new FormData(pwForm);
+        const body = {};
+        const ident = String(fd.get("palworldcard_identity") || "").trim();
+        const pwd = String(fd.get("palworldcard_password") || "");
+        if (ident) body.palworldcard_identity = ident;
+        if (pwd.trim()) body.palworldcard_password = pwd;
+        const status = document.getElementById("palworldcard-status");
+        if (!ident && !pwd.trim()) {
+            status.textContent = "Nichts zu speichern.";
+            return;
+        }
+        const res = await fetch("/api/admin/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        status.textContent = res.ok ? "Gespeichert." : "Fehler beim Speichern.";
+    });
+}
+document.getElementById("clear-palworldcard")?.addEventListener("click", async () => {
+    await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clear_palworldcard: true }),
+    });
+    location.reload();
+});

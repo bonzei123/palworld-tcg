@@ -479,9 +479,14 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS collection (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    foil INTEGER NOT NULL DEFAULT 0,
     owned INTEGER NOT NULL DEFAULT 0,
     wanted INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (user_id, card_id)
+    condition TEXT DEFAULT 'NM',
+    location TEXT DEFAULT '',
+    for_trade INTEGER DEFAULT 0,
+    notes TEXT DEFAULT '',
+    PRIMARY KEY (user_id, card_id, foil)
 );
 CREATE INDEX IF NOT EXISTS idx_collection_user ON collection(user_id);
 
@@ -498,8 +503,9 @@ CREATE INDEX IF NOT EXISTS idx_decks_user ON decks(user_id);
 CREATE TABLE IF NOT EXISTS deck_cards (
     deck_id INTEGER NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
     card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    foil INTEGER NOT NULL DEFAULT 0,
     qty INTEGER NOT NULL DEFAULT 1,
-    PRIMARY KEY (deck_id, card_id)
+    PRIMARY KEY (deck_id, card_id, foil)
 );
 
 CREATE TABLE IF NOT EXISTS chat_cache (
@@ -532,6 +538,7 @@ CREATE TABLE IF NOT EXISTS pulls (
     card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
     source TEXT NOT NULL DEFAULT 'Display',
     qty INTEGER NOT NULL DEFAULT 1,
+    foil INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_pulls_user ON pulls(user_id);
@@ -544,6 +551,80 @@ def _ensure_column(conn: sqlite3.Connection, table: str, name: str, decl: str) -
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
 
+def _table_pk(conn: sqlite3.Connection, table: str) -> list[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return [r[1] for r in sorted((r for r in rows if r[5]), key=lambda r: int(r[5]))]
+
+
+def _rebuild_foil_pk(conn: sqlite3.Connection) -> None:
+    plans = (
+        (
+            "collection",
+            ["user_id", "card_id", "foil"],
+            """
+            CREATE TABLE collection (
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+                foil INTEGER NOT NULL DEFAULT 0,
+                owned INTEGER NOT NULL DEFAULT 0,
+                wanted INTEGER NOT NULL DEFAULT 0,
+                condition TEXT DEFAULT 'NM',
+                location TEXT DEFAULT '',
+                for_trade INTEGER DEFAULT 0,
+                notes TEXT DEFAULT '',
+                PRIMARY KEY (user_id, card_id, foil)
+            );
+            CREATE INDEX IF NOT EXISTS idx_collection_user ON collection(user_id);
+            """,
+            ("user_id", "card_id", "foil", "owned", "wanted", "condition", "location", "for_trade", "notes"),
+        ),
+        (
+            "deck_cards",
+            ["deck_id", "card_id", "foil"],
+            """
+            CREATE TABLE deck_cards (
+                deck_id INTEGER NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
+                card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+                foil INTEGER NOT NULL DEFAULT 0,
+                qty INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (deck_id, card_id, foil)
+            );
+            """,
+            ("deck_id", "card_id", "foil", "qty"),
+        ),
+    )
+    for table, want_pk, create_sql, dest_cols in plans:
+        info = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        if not info:
+            continue
+        if _table_pk(conn, table) == want_pk:
+            continue
+        old_cols = {r[1] for r in info}
+        select_parts = []
+        for col in dest_cols:
+            if col in old_cols:
+                select_parts.append(col)
+            elif col == "foil":
+                select_parts.append("0")
+            elif col == "condition":
+                select_parts.append("'NM'")
+            elif col in {"location", "notes"}:
+                select_parts.append("''")
+            elif col in {"for_trade", "owned", "wanted", "qty"}:
+                select_parts.append("0")
+            else:
+                select_parts.append("NULL")
+        tmp = f"{table}_mig"
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute(f"ALTER TABLE {table} RENAME TO {tmp}")
+        conn.executescript(create_sql)
+        conn.execute(
+            f"INSERT INTO {table} ({', '.join(dest_cols)}) SELECT {', '.join(select_parts)} FROM {tmp}"
+        )
+        conn.execute(f"DROP TABLE {tmp}")
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
@@ -552,10 +633,20 @@ def init_db() -> None:
         _ensure_column(conn, "cards", "landscape", "INTEGER")
         _ensure_column(conn, "cards", "banned", "INTEGER DEFAULT 0")
         _ensure_column(conn, "cards", "price_cents", "INTEGER")
+        _ensure_column(conn, "cards", "price_3d_cents", "INTEGER")
+        _ensure_column(conn, "cards", "price_7d_cents", "INTEGER")
+        _ensure_column(conn, "cards", "price_30d_cents", "INTEGER")
+        _ensure_column(conn, "cards", "price_daily_swing", "REAL")
+        _ensure_column(conn, "cards", "price_3d_swing", "REAL")
+        _ensure_column(conn, "cards", "price_7d_swing", "REAL")
+        _ensure_column(conn, "cards", "active_listing_count", "INTEGER")
+        _ensure_column(conn, "cards", "prices_json", "TEXT")
         _ensure_column(conn, "collection", "condition", "TEXT DEFAULT 'NM'")
         _ensure_column(conn, "collection", "location", "TEXT DEFAULT ''")
         _ensure_column(conn, "collection", "for_trade", "INTEGER DEFAULT 0")
         _ensure_column(conn, "collection", "notes", "TEXT DEFAULT ''")
+        _ensure_column(conn, "pulls", "foil", "INTEGER DEFAULT 0")
+        _rebuild_foil_pk(conn)
         conn.commit()
         fts_n = conn.execute("SELECT COUNT(*) AS n FROM cards_fts").fetchone()["n"]
         cards_n = conn.execute("SELECT COUNT(*) AS n FROM cards").fetchone()["n"]

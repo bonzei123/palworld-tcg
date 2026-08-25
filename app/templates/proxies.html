@@ -25,7 +25,18 @@
             position: relative;
             background: #111;
         }
-        .proxy.landscape { width: 88mm; height: 63mm; }
+        .proxy.foil { outline: 1.2mm solid #c9a227; }
+        .proxy .foil-mark {
+            position: absolute;
+            top: 2mm;
+            right: 2mm;
+            background: #c9a227;
+            color: #1a1200;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 1mm 2mm;
+            z-index: 2;
+        }
         .proxy img { width: 100%; height: 100%; object-fit: contain; display: block; }
         .proxy .fallback {
             padding: 8px;
@@ -50,7 +61,8 @@
     </header>
     <div class="sheet">
         {% for c in copies %}
-        <div class="proxy{% if c.landscape %} landscape{% endif %}">
+        <div class="proxy{% if c.landscape %} landscape{% endif %}{% if c.foil %} foil{% endif %}">
+            {% if c.foil %}<span class="foil-mark">*Foil*</span>{% endif %}
             {% if c.image_url %}
             <img src="{{ c.image_url }}" alt="{{ c.name }}">
             {% else %}

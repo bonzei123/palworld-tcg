@@ -3,6 +3,7 @@ const grid = document.getElementById("grid");
 const meta = document.getElementById("result-meta");
 const pager = document.getElementById("pager");
 const form = document.getElementById("search-form");
+const AUTH = document.body?.dataset.auth === "1";
 
 let page = 1;
 const PAGE_SIZE = 96;
@@ -34,6 +35,43 @@ function params() {
     return u;
 }
 
+function syncUrl() {
+    const u = params();
+    u.delete("limit");
+    if (page === 1) u.delete("page");
+    const qs = u.toString();
+    const next = qs ? ("/?" + qs) : "/";
+    if (location.pathname === "/" && location.search.replace(/^\?/, "") !== qs) {
+        history.replaceState(null, "", next);
+    }
+}
+
+function applyUrl() {
+    const u = new URLSearchParams(location.search);
+    const map = {
+        q: "q",
+        type: "f-type",
+        color: "f-color",
+        rarity: "f-rarity",
+        edition: "f-edition",
+        attribute: "f-attribute",
+        aptitude: "f-aptitude",
+        have: "f-have",
+        sort: "f-sort",
+    };
+    for (const [key, id] of Object.entries(map)) {
+        const el = document.getElementById(id);
+        if (el && u.has(key)) el.value = u.get(key);
+    }
+    page = Math.max(1, Number(u.get("page") || 1) || 1);
+    const filters = document.getElementById("filters");
+    const toggle = document.getElementById("filter-toggle");
+    if (filters && [...filters.querySelectorAll("select")].some((s) => s.value)) {
+        filters.classList.add("is-open");
+        toggle?.setAttribute("aria-expanded", "true");
+    }
+}
+
 function rarityClass(r) {
     return "rarity-chip rarity-" + String(r || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
@@ -45,24 +83,45 @@ function esc(s) {
 }
 
 function cardCode(card) {
-    return card.card_code || card.card_code || "";
+    return card.card_code || "";
 }
 
 function cardImage(card) {
-    return card.image_url || card.image_url || "";
+    return card.image_url || "";
+}
+
+function haveMark(n, f) {
+    const t = (Number(n) || 0) + (Number(f) || 0);
+    if (!t) return "";
+    return `<span class="have-badge">${t}×${f ? " · " + f + "F" : ""}</span>`;
 }
 
 function tile(card) {
     const code = cardCode(card);
-    const img = cardImage(card)
-        ? `<img src="${esc(cardImage(card))}" alt="${esc(card.name)}" loading="lazy">`
+    const src = cardImage(card);
+    const img = src
+        ? `<img src="${esc(src)}" alt="${esc(card.name)}" loading="lazy">`
         : `<div class="missing">Kein Bild</div>`;
     const badges = [
         card.banned ? `<span class="badge ban">Ban</span>` : "",
         card.has_errata ? `<span class="badge errata">Errata</span>` : "",
         card.price_cents ? `<span class="badge price">${(card.price_cents / 100).toFixed(2)} €</span>` : "",
     ].join("");
-    return `<a class="card-tile${card.landscape ? " landscape" : ""}" href="/card/${card.id}">
+    const n = Number(card.owned_normal || 0);
+    const f = Number(card.owned_foil || 0);
+    const actions = AUTH
+        ? `<div class="tile-actions">
+            <button type="button" data-tile-add="0">+1</button>
+            <button type="button" data-tile-add="1">+1 Foil</button>
+           </div>`
+        : "";
+    return `<article class="card-tile${card.landscape ? " landscape" : ""}" tabindex="0"
+        data-card-id="${card.id}"
+        data-hover="${esc(src)}"
+        data-owned-normal="${n}"
+        data-owned-foil="${f}"
+        data-copy-limit="${card.copy_limit || 4}">
+        ${haveMark(n, f)}
         ${img}
         <div class="meta">
             <span>${esc(code)}</span>
@@ -70,11 +129,55 @@ function tile(card) {
             <span class="${rarityClass(card.rarity)}">${esc(card.rarity || "")}</span>
             ${badges}
         </div>
-    </a>`;
+        ${actions}
+    </article>`;
+}
+
+function refreshTileHave(tileEl, n, f) {
+    tileEl.dataset.ownedNormal = String(n);
+    tileEl.dataset.ownedFoil = String(f);
+    let badge = tileEl.querySelector(".have-badge");
+    const html = haveMark(n, f);
+    if (html) {
+        const tmp = document.createElement("div");
+        tmp.innerHTML = html;
+        const next = tmp.firstElementChild;
+        if (badge) badge.replaceWith(next);
+        else tileEl.insertAdjacentElement("afterbegin", next);
+    } else if (badge) {
+        badge.remove();
+    }
+}
+
+async function addCopy(tileEl, foil) {
+    if (!AUTH || !tileEl) return;
+    const id = tileEl.dataset.cardId;
+    const key = foil ? "ownedFoil" : "ownedNormal";
+    const prevN = Number(tileEl.dataset.ownedNormal || 0);
+    const prevF = Number(tileEl.dataset.ownedFoil || 0);
+    const next = (foil ? prevF : prevN) + 1;
+    refreshTileHave(tileEl, foil ? prevN : next, foil ? next : prevF);
+    try {
+        const res = await fetch("/api/collection/" + id, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ owned: next, foil: foil ? 1 : 0 }),
+        });
+        const rec = await res.json();
+        if (!res.ok || !rec.ok) throw new Error(rec.detail || "Fehler");
+        refreshTileHave(
+            tileEl,
+            rec.owned_normal != null ? rec.owned_normal : (foil ? prevN : next),
+            rec.owned_foil != null ? rec.owned_foil : (foil ? next : prevF),
+        );
+    } catch {
+        refreshTileHave(tileEl, prevN, prevF);
+    }
 }
 
 async function load() {
     if (!grid) return;
+    syncUrl();
     grid.innerHTML = `<p class="empty">Lade Karten…</p>`;
     try {
         const res = await fetch("/api/cards?" + params().toString());
@@ -109,6 +212,66 @@ async function load() {
     }
 }
 
+grid?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-tile-add]");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    addCopy(btn.closest(".card-tile"), btn.getAttribute("data-tile-add") === "1");
+});
+
+function tiles() {
+    return [...(grid?.querySelectorAll(".card-tile") || [])];
+}
+
+function gridColumns() {
+    const items = tiles();
+    if (items.length < 2) return 1;
+    const y0 = items[0].offsetTop;
+    let n = 1;
+    for (let i = 1; i < items.length; i++) {
+        if (items[i].offsetTop !== y0) break;
+        n++;
+    }
+    return n;
+}
+
+function inField(el) {
+    return el?.closest?.("input, textarea, select");
+}
+
+document.addEventListener("keydown", (e) => {
+    if (!grid || document.body.classList.contains("modal-open")) return;
+    if (inField(e.target) || inField(document.activeElement)) return;
+    const items = tiles();
+    if (!items.length) return;
+    const current = e.target.closest?.(".card-tile") || document.activeElement?.closest?.(".card-tile");
+    let idx = items.indexOf(current);
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const cols = gridColumns();
+        if (idx < 0) idx = 0;
+        else if (e.key === "ArrowRight") idx = Math.min(items.length - 1, idx + 1);
+        else if (e.key === "ArrowLeft") idx = Math.max(0, idx - 1);
+        else if (e.key === "ArrowDown") idx = Math.min(items.length - 1, idx + cols);
+        else if (e.key === "ArrowUp") idx = Math.max(0, idx - cols);
+        items[idx].focus();
+        return;
+    }
+    if (idx < 0) return;
+    if (e.key === "Enter") {
+        e.preventDefault();
+        const id = items[idx].dataset.cardId;
+        if (id && window.PalTCG?.showCard) window.PalTCG.showCard(id);
+        else if (id) items[idx].click();
+        return;
+    }
+    if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        addCopy(items[idx], false);
+    }
+});
+
 form?.addEventListener("submit", (e) => {
     e.preventDefault();
     page = 1;
@@ -136,5 +299,6 @@ pager?.addEventListener("click", (e) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
+applyUrl();
 load();
 })();
