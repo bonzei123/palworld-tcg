@@ -5,6 +5,7 @@ import io
 from collections import Counter
 from typing import Any
 
+from .activity import card_label, log_activity
 from .db import get_db, row_to_card
 
 CARD_SELECT = """
@@ -193,7 +194,7 @@ def set_collection(
                 (user_id, card_id, foil_n, owned_n, wanted_n, cond, loc, int(trade), note),
             )
     totals = collection_map(user_id).get(card_id) or {}
-    return {
+    rec = {
         "owned": owned_n,
         "wanted": wanted_n,
         "foil": bool(foil_n),
@@ -205,6 +206,37 @@ def set_collection(
         "owned_foil": int(totals.get("owned_foil") or 0),
         "owned_total": int(totals.get("owned") or 0),
     }
+    kind = "Foil" if foil_n else "Normal"
+    bits: list[str] = []
+    if owned_n != int(prev.get("owned") or 0):
+        before = int(prev.get("owned") or 0)
+        delta = owned_n - before
+        if delta == 1:
+            bits.append(f"{kind} +1 ({before} → {owned_n})")
+        elif delta == -1:
+            bits.append(f"{kind} −1 ({before} → {owned_n})")
+        else:
+            bits.append(f"{kind} {before} → {owned_n}")
+    if not foil_n and wanted_n != int(prev.get("wanted") or 0):
+        bits.append(f"Wunschliste {int(prev.get('wanted') or 0)} → {wanted_n}")
+    if cond != (prev.get("condition") or "NM"):
+        bits.append(f"Zustand {prev.get('condition') or 'NM'} → {cond}")
+    if loc != (prev.get("location") or ""):
+        bits.append(f"Lagerort „{prev.get('location') or '—'}“ → „{loc or '—'}“")
+    if trade != bool(prev.get("for_trade")):
+        bits.append("Tausch an" if trade else "Tausch aus")
+    if note != (prev.get("notes") or ""):
+        bits.append("Notiz geändert")
+    if bits:
+        log_activity(
+            user_id,
+            "collection",
+            f"{card_label(card_id)} — {'; '.join(bits)}",
+            card_id=card_id,
+            foil=foil_n,
+            detail={"owned": owned_n, "wanted": wanted_n, "foil": foil_n},
+        )
+    return rec
 
 
 def collection_rows(
@@ -422,7 +454,15 @@ def create_deck(user_id: int, name: str) -> int:
             "INSERT INTO decks(user_id, name) VALUES (?, ?)",
             (user_id, name[:80]),
         )
-        return int(cur.lastrowid)
+        deck_id = int(cur.lastrowid)
+        log_activity(
+            user_id,
+            "deck_create",
+            f"Deck angelegt: {name[:80]}",
+            deck_id=deck_id,
+            conn=conn,
+        )
+        return deck_id
 
 
 def rename_deck(user_id: int, deck_id: int, name: str) -> bool:
@@ -430,21 +470,43 @@ def rename_deck(user_id: int, deck_id: int, name: str) -> bool:
     if not name:
         return False
     with get_db() as conn:
-        cur = conn.execute(
+        prev = conn.execute(
+            "SELECT name FROM decks WHERE id = ? AND user_id = ?",
+            (deck_id, user_id),
+        ).fetchone()
+        if not prev:
+            return False
+        old = prev["name"] or ""
+        conn.execute(
             "UPDATE decks SET name = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?",
             (name[:80], deck_id, user_id),
         )
-        return cur.rowcount > 0
+        if old != name[:80]:
+            log_activity(
+                user_id,
+                "deck_rename",
+                f"Deck umbenannt: {old} → {name[:80]}",
+                deck_id=deck_id,
+                conn=conn,
+            )
+        return True
 
 
 def delete_deck(user_id: int, deck_id: int) -> bool:
     with get_db() as conn:
         owned = conn.execute(
-            "SELECT id FROM decks WHERE id = ? AND user_id = ?",
+            "SELECT id, name FROM decks WHERE id = ? AND user_id = ?",
             (deck_id, user_id),
         ).fetchone()
         if not owned:
             return False
+        log_activity(
+            user_id,
+            "deck_delete",
+            f"Deck gelöscht: {owned['name']}",
+            deck_id=deck_id,
+            conn=conn,
+        )
         conn.execute("DELETE FROM deck_cards WHERE deck_id = ?", (deck_id,))
         conn.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
         return True
@@ -457,13 +519,18 @@ def set_deck_card(
     foil_n = as_foil(foil)
     with get_db() as conn:
         owned = conn.execute(
-            "SELECT id FROM decks WHERE id = ? AND user_id = ?",
+            "SELECT id, name FROM decks WHERE id = ? AND user_id = ?",
             (deck_id, user_id),
         ).fetchone()
         if not owned:
             return None
         if not conn.execute("SELECT id FROM cards WHERE id = ?", (card_id,)).fetchone():
             raise KeyError("card")
+        prev_row = conn.execute(
+            "SELECT qty FROM deck_cards WHERE deck_id = ? AND card_id = ? AND foil = ?",
+            (deck_id, card_id, foil_n),
+        ).fetchone()
+        prev_qty = int(prev_row["qty"] if prev_row else 0)
         if qty <= 0:
             conn.execute(
                 "DELETE FROM deck_cards WHERE deck_id = ? AND card_id = ? AND foil = ?",
@@ -481,6 +548,17 @@ def set_deck_card(
             "UPDATE decks SET updated_at = datetime('now') WHERE id = ?",
             (deck_id,),
         )
+        if prev_qty != qty:
+            kind = "Foil" if foil_n else "Normal"
+            log_activity(
+                user_id,
+                "deck_card",
+                f"Deck {owned['name']}: {card_label(card_id, conn)} {kind} {prev_qty} → {qty}",
+                card_id=card_id,
+                deck_id=deck_id,
+                foil=foil_n,
+                conn=conn,
+            )
     return get_deck(user_id, deck_id)
 
 

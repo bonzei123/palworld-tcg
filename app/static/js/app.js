@@ -105,7 +105,7 @@ function tile(card) {
     const badges = [
         card.banned ? `<span class="badge ban">Ban</span>` : "",
         card.has_errata ? `<span class="badge errata">Errata</span>` : "",
-        card.price_cents ? `<span class="badge price">${(card.price_cents / 100).toFixed(2)} €</span>` : "",
+        card.price_cents ? `<span class="badge price"${card.price_chart_cents && String(card.price_chart_cents).split(",").length >= 2 ? ` data-price-cents="${esc(card.price_chart_cents)}" data-price-labels="${esc(card.price_chart_labels || "")}"` : ""}>${(card.price_cents / 100).toFixed(2)} €</span>` : "",
     ].join("");
     const n = Number(card.owned_normal || 0);
     const f = Number(card.owned_foil || 0);

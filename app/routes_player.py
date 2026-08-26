@@ -7,6 +7,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from .activity import list_activity
 from .auth import current_user, login_user, register_user, require_user
 from .db import get_db, get_setting
 from .player import (
@@ -61,7 +62,9 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
 
     @app.get("/konto")
     def konto_page(request: Request, next: str = "/"):
-        return page(request, "konto.html", next=next, error=None, mode="login")
+        user = current_user(request)
+        history = list_activity(user["id"]) if user else []
+        return page(request, "konto.html", next=next, error=None, mode="login", activity=history)
 
     @app.post("/konto/register")
     async def konto_register(request: Request):
@@ -114,7 +117,12 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
         user = current_user(request)
         if not user:
             return RedirectResponse("/konto?next=/sammlung", status_code=303)
-        return page(request, "collection.html", summary=collection_summary(user["id"]))
+        return page(
+            request,
+            "collection.html",
+            summary=collection_summary(user["id"]),
+            value=collection_value(user["id"]),
+        )
 
     @app.get("/api/collection")
     def api_collection(

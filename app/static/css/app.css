@@ -156,6 +156,37 @@ main {
 .hero h1, .detail h1 { font-size: clamp(1.55rem, 4vw, 3rem); line-height: 1.12; margin: 0.2rem 0 0.55rem; }
 .kicker { color: var(--mint-2); text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.72rem; margin: 0; }
 .lede { color: var(--muted); max-width: 46rem; }
+.value-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0.85rem 0 0;
+    padding: 0.4rem 0.85rem 0.4rem 0.45rem;
+    background: linear-gradient(180deg, #2a2314, #1a1710);
+    border: 1px solid rgba(240, 199, 94, 0.45);
+    border-radius: 999px;
+    box-shadow: 0 0 18px rgba(240, 199, 94, 0.12);
+}
+.value-chip-icon {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+.value-chip small {
+    display: block;
+    color: var(--gold);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.value-chip strong {
+    display: block;
+    color: #f6e7b2;
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
+}
 
 .searchbar {
     margin-top: 1.2rem;
@@ -978,6 +1009,38 @@ body.modal-open { overflow: hidden; }
     font-size: 0.82rem;
 }
 .price-line { color: var(--mint); font-size: 0.88rem; margin: 0.35rem 0 0.7rem; }
+.price-line[data-price-cents], .badge.price[data-price-cents] { cursor: help; }
+.price-chart p {
+    margin: 0.15rem 0 0;
+    font-size: 0.72rem;
+    color: #c5d8cc;
+    max-width: 196px;
+}
+.activity-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.8rem 0 0;
+}
+.activity-list li {
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    gap: 0.7rem;
+    align-items: center;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--line);
+}
+.activity-list p { margin: 0; }
+.activity-list time { color: #8aa394; font-size: 0.78rem; font-family: var(--mono); }
+.activity-thumb {
+    width: 52px;
+    height: 72px;
+    display: block;
+    overflow: hidden;
+    border-radius: 6px;
+    background: #0a0f0d;
+}
+.activity-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.activity-thumb.empty { background: #16201c; }
 .card-code-link {
     display: inline;
     padding: 0;

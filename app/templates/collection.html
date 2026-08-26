@@ -8,6 +8,20 @@
         <p class="lede" id="summary-line">
             {{ summary.have }} im Besitz · {{ summary.owned }} Exemplare · {{ summary.missing }} fehlend · {{ summary.wanted }} gewünscht
         </p>
+        <p class="value-chip" id="value-chip" title="Summe aller Karten in der Sammlung zu aktuellen Preisen">
+            <span class="value-chip-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32" width="28" height="28">
+                    <circle cx="16" cy="16" r="14" fill="#c9a227"/>
+                    <circle cx="16" cy="16" r="11" fill="#f0c75e"/>
+                    <circle cx="16" cy="16" r="8.5" fill="none" stroke="#8a6a12" stroke-width="1.2"/>
+                    <text x="16" y="20.5" text-anchor="middle" fill="#5c4708" font-size="12" font-weight="700" font-family="Georgia, serif">€</text>
+                </svg>
+            </span>
+            <span>
+                <small>Sammelwert</small>
+                <strong id="value-chip-amount">{% if value and value.cents %}{{ '%.2f'|format(value.cents / 100) }} €{% else %}0.00 €{% endif %}</strong>
+            </span>
+        </p>
     </div>
     <div class="row wrap">
         <a class="ghost" href="/tausch">Tausch</a>

@@ -13,7 +13,7 @@
             <div class="badge-row">
                 {% if card.banned %}<span class="badge ban">Ban</span>{% endif %}
                 {% if card.has_errata %}<span class="badge errata">Errata</span>{% endif %}
-                {% if card.price_cents %}<span class="badge price">{{ '%.2f'|format(card.price_cents / 100) }} €</span>{% endif %}
+                {% if card.price_cents %}<span class="badge price"{% if card.price_chart_cents %} data-price-cents="{{ card.price_chart_cents }}" data-price-labels="{{ card.price_chart_labels }}"{% endif %}>{{ '%.2f'|format(card.price_cents / 100) }} €</span>{% endif %}
             </div>
         </figure>
         <div class="detail-body">
@@ -31,7 +31,7 @@
             <p class="muted"><a href="/konto?next=/card/{{ card.id }}">Anmelden</a>, um Besitz zu sehen und Karten hinzuzufügen.</p>
             {% endif %}
             {% if card.price_cents is not none or card.price_7d_cents is not none or card.price_30d_cents is not none %}
-            <p class="price-line">
+            <p class="price-line"{% if card.price_chart_cents %} data-price-cents="{{ card.price_chart_cents }}" data-price-labels="{{ card.price_chart_labels }}"{% endif %}>
                 {% if card.price_cents is not none %}Aktuell {{ '%.2f'|format(card.price_cents / 100) }} €{% endif %}
                 {% if card.price_7d_cents is not none %} · 7 Tage {{ '%.2f'|format(card.price_7d_cents / 100) }} €{% endif %}
                 {% if card.price_30d_cents is not none %} · 30 Tage {{ '%.2f'|format(card.price_30d_cents / 100) }} €{% endif %}

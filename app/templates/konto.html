@@ -10,6 +10,38 @@
         <button type="submit" class="ghost">Abmelden</button>
     </form>
 </section>
+<section class="panel">
+    <h2>Verlauf</h2>
+    <p class="muted">Jede Änderung an Sammlung, Decks, Pulls und Notizen. So findest du ein versehentliches +1 wieder.</p>
+    {% if activity %}
+    <ol class="activity-list">
+        {% for ev in activity %}
+        <li>
+            {% if ev.image_url %}
+            <a class="activity-thumb" href="{% if ev.card_id %}/card/{{ ev.card_id }}{% else %}#{% endif %}">
+                <img src="{{ ev.image_url }}" alt="">
+            </a>
+            {% else %}
+            <span class="activity-thumb empty"></span>
+            {% endif %}
+            <div>
+                <p>
+                    {% if ev.card_id %}
+                    <a href="/card/{{ ev.card_id }}">{{ ev.summary }}</a>
+                    {% else %}
+                    {{ ev.summary }}
+                    {% endif %}
+                    {% if ev.foil %}<span class="badge foil">Foil</span>{% endif %}
+                </p>
+                <time datetime="{{ ev.created_at }}">{{ ev.created_at }}</time>
+            </div>
+        </li>
+        {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted">Noch keine Einträge. Sobald du Karten hinzufügst oder ein Deck änderst, erscheint das hier.</p>
+    {% endif %}
+</section>
 {% else %}
 <section class="account-grid">
     <article class="panel">

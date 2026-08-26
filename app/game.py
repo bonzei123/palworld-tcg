@@ -7,6 +7,7 @@ import sqlite3
 from collections import Counter, defaultdict
 from typing import Any
 
+from .activity import card_label, log_activity
 from .db import get_db, get_setting, row_to_card, set_setting
 
 CARD_SELECT = """
@@ -496,6 +497,16 @@ def add_pull(
                 """,
                 (user_id, card_id, foil_n, owned, wanted),
             )
+        kind = "Foil" if foil_n else "Normal"
+        extra = f", Sammlung {owned - qty if increment else owned} → {owned}" if increment else ""
+        log_activity(
+            user_id,
+            "pull",
+            f"Pull · {source}: {card_label(card_id, conn)} {kind} +{qty}{extra}",
+            card_id=card_id,
+            foil=foil_n,
+            conn=conn,
+        )
     return {"ok": True, "owned": owned, "source": source, "foil": bool(foil_n)}
 
 
@@ -544,6 +555,15 @@ def save_notes(user_id: int, card_id: int, notes: str, tags: list[str]) -> dict[
     clean = [t.strip()[:24] for t in tags if str(t).strip()][:8]
     blob = json.dumps(clean, ensure_ascii=False)
     with get_db() as conn:
+        prev = conn.execute(
+            "SELECT notes, tags FROM card_notes WHERE user_id = ? AND card_id = ?",
+            (user_id, card_id),
+        ).fetchone()
+        prev_notes = (prev["notes"] if prev else "") or ""
+        try:
+            prev_tags = json.loads((prev["tags"] if prev else "[]") or "[]")
+        except json.JSONDecodeError:
+            prev_tags = []
         if not notes and not clean:
             conn.execute(
                 "DELETE FROM card_notes WHERE user_id = ? AND card_id = ?",
@@ -558,6 +578,14 @@ def save_notes(user_id: int, card_id: int, notes: str, tags: list[str]) -> dict[
                     notes = excluded.notes, tags = excluded.tags
                 """,
                 (user_id, card_id, notes, blob),
+            )
+        if prev_notes != notes or prev_tags != clean:
+            log_activity(
+                user_id,
+                "notes",
+                f"Notiz: {card_label(card_id, conn)}" + (" (gelöscht)" if not notes and not clean else ""),
+                card_id=card_id,
+                conn=conn,
             )
     return {"notes": notes, "tags": clean}
 
@@ -642,7 +670,7 @@ def parse_deck_text(text: str) -> list[dict[str, Any]]:
 def apply_deck_import(user_id: int, deck_id: int, items: list[dict[str, Any]]) -> None:
     with get_db() as conn:
         owned = conn.execute(
-            "SELECT id FROM decks WHERE id = ? AND user_id = ?",
+            "SELECT id, name FROM decks WHERE id = ? AND user_id = ?",
             (deck_id, user_id),
         ).fetchone()
         if not owned:
@@ -672,3 +700,14 @@ def apply_deck_import(user_id: int, deck_id: int, items: list[dict[str, Any]]) -
                 (deck_id, int(row["id"]), foil, qty),
             )
         conn.execute("UPDATE decks SET updated_at = datetime('now') WHERE id = ?", (deck_id,))
+        n = conn.execute(
+            "SELECT IFNULL(SUM(qty), 0) AS n FROM deck_cards WHERE deck_id = ?",
+            (deck_id,),
+        ).fetchone()["n"]
+        log_activity(
+            user_id,
+            "deck_import",
+            f"Deck importiert: {owned['name']} ({int(n)} Karten)",
+            deck_id=deck_id,
+            conn=conn,
+        )

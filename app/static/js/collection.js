@@ -72,17 +72,23 @@ if (body) {
         )).join("");
     }
 
+    function renderValue(value) {
+        const amount = document.getElementById("value-chip-amount");
+        const line = document.getElementById("value-line");
+        const cents = Number(value?.cents || 0);
+        if (amount) amount.textContent = cents ? euro(cents) : "0.00 €";
+        if (line) {
+            line.textContent = cents
+                ? `Sammelwert: ${euro(cents)} · ${value.priced || 0} Karten mit Preis`
+                : "Sammelwert erscheint, sobald Preise hinterlegt sind.";
+        }
+    }
+
     async function loadProgress() {
         const res = await fetch("/api/collection/progress");
         if (!res.ok) return;
         const data = await res.json();
-        const value = data.value || {};
-        const valueLine = document.getElementById("value-line");
-        if (valueLine) {
-            valueLine.textContent = value.cents
-                ? `Sammelwert: ${euro(value.cents)} · ${value.priced || 0} Karten mit Preis`
-                : "Sammelwert erscheint, sobald Preise hinterlegt sind.";
-        }
+        renderValue(data.value || {});
         const syncLine = document.getElementById("sync-line");
         if (syncLine) {
             const info = data.prices_sync || {};

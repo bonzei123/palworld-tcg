@@ -82,7 +82,7 @@
     }
 
     function hoverNode(el) {
-        if (el.closest?.(".kw, .kw-tip, .detail-art, .card-loupe, .qty-panel")) return null;
+        if (el.closest?.(".kw, .kw-tip, .detail-art, .card-loupe, .qty-panel, .badge.price, .price-line, .price-chart, [data-price-cents]")) return null;
         return el.closest("[data-hover], [data-card-id], a[href^='/card/'], .card-tile, [data-add], img[src*='/images/']");
     }
 
@@ -412,7 +412,12 @@
         }
         if (card.active_listing_count) parts.push(`${Number(card.active_listing_count)} Angebote`);
         if (!parts.length) return "";
-        return `<p class="price-line">${parts.join(" · ")}</p>`;
+        const cents = card.price_chart_cents || "";
+        const labels = card.price_chart_labels || "";
+        const chart = cents.split(",").filter(Boolean).length >= 2
+            ? ` data-price-cents="${esc(cents)}" data-price-labels="${esc(labels)}"`
+            : "";
+        return `<p class="price-line"${chart}>${parts.join(" · ")}</p>`;
     }
 
     function openCardView(card) {
@@ -557,6 +562,74 @@
 
     bindArtZoom(document);
     window.PalTCG = { showCard, showCardByCode, openCardView, colorClass, esc };
+
+    const priceTip = document.getElementById("price-chart");
+
+    function hidePriceChart() {
+        if (priceTip) priceTip.hidden = true;
+    }
+
+    function priceSpark(cents, labels) {
+        const vals = String(cents || "").split(",").map((n) => Number(n)).filter((n) => Number.isFinite(n));
+        const labs = String(labels || "").split(",");
+        if (vals.length < 2) return "";
+        const w = 196;
+        const h = 56;
+        const padX = 12;
+        const padY = 8;
+        let min = Math.min(...vals);
+        let max = Math.max(...vals);
+        if (min === max) {
+            min -= 1;
+            max += 1;
+        }
+        const xs = vals.map((_, i) => padX + (i * (w - padX * 2)) / (vals.length - 1));
+        const ys = vals.map((v) => padY + (1 - (v - min) / (max - min)) * (h - padY * 2));
+        const pts = xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ");
+        const dots = xs.map((x, i) => `<circle cx="${x.toFixed(1)}" cy="${ys[i].toFixed(1)}" r="3" fill="#9fe8b8"></circle>`).join("");
+        const legend = vals.map((v, i) => `${esc(labs[i] || "")} ${(v / 100).toFixed(2)}€`).join(" · ");
+        return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
+            <polyline fill="none" stroke="#3ecf8e" stroke-width="2" points="${pts}"></polyline>
+            ${dots}
+        </svg><p>${legend}</p>`;
+    }
+
+    function showPriceChart(el) {
+        if (!priceTip || !el?.dataset?.priceCents) return;
+        const html = priceSpark(el.dataset.priceCents, el.dataset.priceLabels);
+        if (!html) {
+            hidePriceChart();
+            return;
+        }
+        hideHover();
+        priceTip.innerHTML = html;
+        priceTip.hidden = false;
+        const r = el.getBoundingClientRect();
+        const tw = priceTip.offsetWidth || 210;
+        const th = priceTip.offsetHeight || 90;
+        let left = r.left + r.width / 2 - tw / 2;
+        let top = r.bottom + 8;
+        if (top + th > window.innerHeight - 8) top = r.top - th - 8;
+        if (left < 8) left = 8;
+        if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+        priceTip.style.left = `${left}px`;
+        priceTip.style.top = `${top}px`;
+    }
+
+    document.addEventListener("pointerover", (e) => {
+        const el = e.target.closest?.("[data-price-cents]");
+        if (!el) return;
+        if (e.pointerType === "touch") return;
+        showPriceChart(el);
+    });
+    document.addEventListener("pointerout", (e) => {
+        const el = e.target.closest?.("[data-price-cents]");
+        if (!el) return;
+        if (el.contains(e.relatedTarget)) return;
+        if (priceTip && priceTip.contains(e.relatedTarget)) return;
+        hidePriceChart();
+    });
+    window.addEventListener("scroll", hidePriceChart, true);
 
     const kwTip = document.getElementById("kw-tip");
     const kwTitle = document.getElementById("kw-tip-title");

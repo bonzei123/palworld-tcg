@@ -168,6 +168,22 @@ def row_to_card(row: sqlite3.Row | None) -> dict[str, Any] | None:
     data["landscape"] = bool(int(data["landscape"] or 0)) if data.get("landscape") is not None else False
     data["banned"] = bool(int(data.get("banned") or 0))
     data["price_cents"] = data.get("price_cents")
+    chart = []
+    for label, key in (
+        ("30T", "price_30d_cents"),
+        ("7T", "price_7d_cents"),
+        ("3T", "price_3d_cents"),
+        ("Jetzt", "price_cents"),
+    ):
+        raw = data.get(key)
+        if raw is None or raw == "":
+            continue
+        try:
+            chart.append((label, int(raw)))
+        except (TypeError, ValueError):
+            continue
+    data["price_chart_labels"] = ",".join(p[0] for p in chart)
+    data["price_chart_cents"] = ",".join(str(p[1]) for p in chart)
     return data
 
 
@@ -542,6 +558,19 @@ CREATE TABLE IF NOT EXISTS pulls (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_pulls_user ON pulls(user_id);
+
+CREATE TABLE IF NOT EXISTS activity (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    action TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    card_id INTEGER REFERENCES cards(id) ON DELETE SET NULL,
+    deck_id INTEGER,
+    foil INTEGER NOT NULL DEFAULT 0,
+    detail TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_activity_user ON activity(user_id, id DESC);
 """
 
 
