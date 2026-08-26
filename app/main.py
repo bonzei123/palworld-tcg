@@ -42,6 +42,7 @@ from .game import (
 from .player import attach_collection, printings_for
 from .routes_player import register_player_routes
 from .db import (
+    FOIL_RARITIES,
     delete_card,
     delete_edition,
     get_db,
@@ -457,10 +458,14 @@ def api_cards(
             )
             params.append(user["id"])
         elif have == "foil":
+            rarities = sorted(FOIL_RARITIES)
+            placeholders = ",".join("?" * len(rarities))
             where.append(
-                "EXISTS (SELECT 1 FROM collection WHERE collection.card_id = cards.id "
-                "AND collection.user_id = ? AND collection.foil = 1 AND collection.owned > 0)"
+                f"UPPER(IFNULL(cards.rarity,'')) IN ({placeholders}) AND EXISTS ("
+                "SELECT 1 FROM collection WHERE collection.card_id = cards.id "
+                "AND collection.user_id = ? AND collection.owned > 0)"
             )
+            params.extend(rarities)
             params.append(user["id"])
         elif have == "incomplete":
             where.append(

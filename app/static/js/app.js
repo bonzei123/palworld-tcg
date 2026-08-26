@@ -90,10 +90,10 @@ function cardImage(card) {
     return card.image_url || "";
 }
 
-function haveMark(n, f) {
-    const t = (Number(n) || 0) + (Number(f) || 0);
+function haveMark(n) {
+    const t = Number(n) || 0;
     if (!t) return "";
-    return `<span class="have-badge">${t}×${f ? " · " + f + "F" : ""}</span>`;
+    return `<span class="have-badge">${t}×</span>`;
 }
 
 function tile(card) {
@@ -103,25 +103,23 @@ function tile(card) {
         ? `<img src="${esc(src)}" alt="${esc(card.name)}" loading="lazy">`
         : `<div class="missing">Kein Bild</div>`;
     const badges = [
+        card.foil ? `<span class="badge foil">Foil</span>` : "",
         card.banned ? `<span class="badge ban">Ban</span>` : "",
         card.has_errata ? `<span class="badge errata">Errata</span>` : "",
         card.price_cents ? `<span class="badge price"${card.price_chart_cents && String(card.price_chart_cents).split(",").length >= 2 ? ` data-price-cents="${esc(card.price_chart_cents)}" data-price-labels="${esc(card.price_chart_labels || "")}"` : ""}>${(card.price_cents / 100).toFixed(2)} €</span>` : "",
     ].join("");
-    const n = Number(card.owned_normal || 0);
-    const f = Number(card.owned_foil || 0);
+    const n = Number(card.owned || 0);
     const actions = AUTH
         ? `<div class="tile-actions">
-            <button type="button" data-tile-add="0">+1</button>
-            <button type="button" data-tile-add="1">+1 Foil</button>
+            <button type="button" data-tile-add>+1</button>
            </div>`
         : "";
     return `<article class="card-tile${card.landscape ? " landscape" : ""}" tabindex="0"
         data-card-id="${card.id}"
         data-hover="${esc(src)}"
-        data-owned-normal="${n}"
-        data-owned-foil="${f}"
+        data-owned="${n}"
         data-copy-limit="${card.copy_limit || 4}">
-        ${haveMark(n, f)}
+        ${haveMark(n)}
         ${img}
         <div class="meta">
             <span>${esc(code)}</span>
@@ -133,11 +131,10 @@ function tile(card) {
     </article>`;
 }
 
-function refreshTileHave(tileEl, n, f) {
-    tileEl.dataset.ownedNormal = String(n);
-    tileEl.dataset.ownedFoil = String(f);
+function refreshTileHave(tileEl, n) {
+    tileEl.dataset.owned = String(n);
     let badge = tileEl.querySelector(".have-badge");
-    const html = haveMark(n, f);
+    const html = haveMark(n);
     if (html) {
         const tmp = document.createElement("div");
         tmp.innerHTML = html;
@@ -149,29 +146,23 @@ function refreshTileHave(tileEl, n, f) {
     }
 }
 
-async function addCopy(tileEl, foil) {
+async function addCopy(tileEl) {
     if (!AUTH || !tileEl) return;
     const id = tileEl.dataset.cardId;
-    const key = foil ? "ownedFoil" : "ownedNormal";
-    const prevN = Number(tileEl.dataset.ownedNormal || 0);
-    const prevF = Number(tileEl.dataset.ownedFoil || 0);
-    const next = (foil ? prevF : prevN) + 1;
-    refreshTileHave(tileEl, foil ? prevN : next, foil ? next : prevF);
+    const prevN = Number(tileEl.dataset.owned || 0);
+    const next = prevN + 1;
+    refreshTileHave(tileEl, next);
     try {
         const res = await fetch("/api/collection/" + id, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ owned: next, foil: foil ? 1 : 0 }),
+            body: JSON.stringify({ owned: next }),
         });
         const rec = await res.json();
         if (!res.ok || !rec.ok) throw new Error(rec.detail || "Fehler");
-        refreshTileHave(
-            tileEl,
-            rec.owned_normal != null ? rec.owned_normal : (foil ? prevN : next),
-            rec.owned_foil != null ? rec.owned_foil : (foil ? next : prevF),
-        );
+        refreshTileHave(tileEl, rec.owned != null ? rec.owned : next);
     } catch {
-        refreshTileHave(tileEl, prevN, prevF);
+        refreshTileHave(tileEl, prevN);
     }
 }
 
@@ -217,7 +208,7 @@ grid?.addEventListener("click", (e) => {
     if (!btn) return;
     e.preventDefault();
     e.stopPropagation();
-    addCopy(btn.closest(".card-tile"), btn.getAttribute("data-tile-add") === "1");
+    addCopy(btn.closest(".card-tile"));
 });
 
 function tiles() {
@@ -268,7 +259,7 @@ document.addEventListener("keydown", (e) => {
     }
     if (e.key === "+" || e.key === "=") {
         e.preventDefault();
-        addCopy(items[idx], false);
+        addCopy(items[idx]);
     }
 });
 

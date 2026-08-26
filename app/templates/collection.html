@@ -53,7 +53,6 @@
     <form class="row wrap" id="add-code">
         <input type="text" name="code" placeholder="EBP01-012" required autocomplete="off">
         <input type="number" name="owned" min="1" max="36" value="1" title="Anzahl">
-        <label class="check"><input type="checkbox" name="foil"> Foil</label>
         <input type="text" name="source" placeholder="Display / Quelle (optional)">
         <button type="submit">Hinzufügen</button>
     </form>
@@ -92,7 +91,6 @@
                 <th>Karte</th>
                 <th>Habe</th>
                 <th>Brauche</th>
-                <th>Foil</th>
                 <th>Zustand</th>
                 <th>Ort</th>
                 <th>Tausch</th>
@@ -110,5 +108,5 @@
 </section>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/collection.js?v=13" defer></script>
+<script src="/static/js/collection.js?v=16" defer></script>
 {% endblock %}

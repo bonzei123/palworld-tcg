@@ -11,6 +11,7 @@
             <div class="missing-art">Kein Bild</div>
             {% endif %}
             <div class="badge-row">
+                {% if card.foil %}<span class="badge foil">Foil</span>{% endif %}
                 {% if card.banned %}<span class="badge ban">Ban</span>{% endif %}
                 {% if card.has_errata %}<span class="badge errata">Errata</span>{% endif %}
                 {% if card.price_cents %}<span class="badge price"{% if card.price_chart_cents %} data-price-cents="{{ card.price_chart_cents }}" data-price-labels="{{ card.price_chart_labels }}"{% endif %}>{{ '%.2f'|format(card.price_cents / 100) }} €</span>{% endif %}
@@ -22,7 +23,7 @@
             {% if user %}
             <p class="have-chip" data-have-chip data-card-id="{{ card.id }}">
                 {% if (card.owned or 0) > 0 %}
-                {{ card.owned }}× in der Sammlung{% if card.owned_foil %} · {{ card.owned_foil }} Foil{% endif %}
+                {{ card.owned }}× in der Sammlung
                 {% else %}
                 Nicht in der Sammlung
                 {% endif %}
@@ -76,18 +77,15 @@
                     <h2>Sammlung</h2>
                     <p class="have-line" data-have-line>
                         {% if (card.owned or 0) > 0 %}
-                        Im Besitz: {{ card.owned }} ({{ card.owned_normal or 0 }} normal, {{ card.owned_foil or 0 }} Foil)
+                        Im Besitz: {{ card.owned }}
                         {% else %}
                         Noch nicht in der Sammlung.
                         {% endif %}
                     </p>
                 </div>
                 <div class="qty-row">
-                    <label>Habe ich <input type="number" min="0" max="99" value="{{ card.owned_normal or 0 }}" data-owned></label>
+                    <label>Habe ich <input type="number" min="0" max="99" value="{{ card.owned or 0 }}" data-owned></label>
                     <button type="button" class="ghost" data-add-copy="0">+1</button>
-                    <label class="check"><input type="checkbox" data-foil {% if card.owned_foil %}checked{% endif %}> Foil</label>
-                    <label>Anzahl Foil <input type="number" min="0" max="99" value="{{ card.owned_foil or 0 }}" data-owned-foil></label>
-                    <button type="button" class="ghost" data-add-copy="1">+1 Foil</button>
                     <label>Brauche ich <input type="number" min="0" max="99" value="{{ card.wanted or 0 }}" data-wanted></label>
                     <label>Zustand
                         <select data-condition>
@@ -154,5 +152,5 @@
 </article>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/collection.js?v=13" defer></script>
+<script src="/static/js/collection.js?v=16" defer></script>
 {% endblock %}

@@ -6,21 +6,13 @@ from collections import Counter
 from typing import Any
 
 from .activity import card_label, log_activity
-from .db import get_db, row_to_card
+from .db import get_db, is_foil_printing, row_to_card
 
 CARD_SELECT = """
 SELECT cards.*, editions.code AS edition_code, editions.name AS edition_name
 FROM cards
 LEFT JOIN editions ON editions.id = cards.edition_id
 """
-
-
-def as_foil(value: Any) -> int:
-    if value is True or value == 1:
-        return 1
-    if isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "on", "foil"}:
-        return 1
-    return 0
 
 
 def _empty_variant() -> dict[str, Any]:
@@ -31,12 +23,10 @@ def _empty_variant() -> dict[str, Any]:
         "location": "",
         "for_trade": False,
         "notes": "",
-        "foil": False,
     }
 
 
-def collection_variant(user_id: int, card_id: int, foil: int = 0) -> dict[str, Any]:
-    foil_n = as_foil(foil)
+def collection_variant(user_id: int, card_id: int) -> dict[str, Any]:
     with get_db() as conn:
         row = conn.execute(
             """
@@ -44,16 +34,13 @@ def collection_variant(user_id: int, card_id: int, foil: int = 0) -> dict[str, A
                    IFNULL(condition, 'NM') AS condition,
                    IFNULL(location, '') AS location,
                    IFNULL(for_trade, 0) AS for_trade,
-                   IFNULL(notes, '') AS notes,
-                   IFNULL(foil, 0) AS foil
-            FROM collection WHERE user_id = ? AND card_id = ? AND foil = ?
+                   IFNULL(notes, '') AS notes
+            FROM collection WHERE user_id = ? AND card_id = ?
             """,
-            (user_id, card_id, foil_n),
+            (user_id, card_id),
         ).fetchone()
     if not row:
-        rec = _empty_variant()
-        rec["foil"] = bool(foil_n)
-        return rec
+        return _empty_variant()
     return {
         "owned": int(row["owned"] or 0),
         "wanted": int(row["wanted"] or 0),
@@ -61,7 +48,6 @@ def collection_variant(user_id: int, card_id: int, foil: int = 0) -> dict[str, A
         "location": row["location"] or "",
         "for_trade": bool(row["for_trade"]),
         "notes": row["notes"] or "",
-        "foil": bool(row["foil"]),
     }
 
 
@@ -69,47 +55,25 @@ def collection_map(user_id: int) -> dict[int, dict[str, Any]]:
     with get_db() as conn:
         rows = conn.execute(
             """
-            SELECT card_id, IFNULL(foil, 0) AS foil, owned, wanted,
+            SELECT card_id, owned, wanted,
                    IFNULL(condition, 'NM') AS condition,
                    IFNULL(location, '') AS location,
                    IFNULL(for_trade, 0) AS for_trade,
                    IFNULL(notes, '') AS notes
             FROM collection WHERE user_id = ?
-            ORDER BY foil
             """,
             (user_id,),
         ).fetchall()
     out: dict[int, dict[str, Any]] = {}
     for r in rows:
-        cid = int(r["card_id"])
-        foil = bool(r["foil"])
-        rec = out.get(cid)
-        if rec is None:
-            rec = {
-                "owned": 0,
-                "wanted": 0,
-                "owned_normal": 0,
-                "owned_foil": 0,
-                "condition": r["condition"] or "NM",
-                "location": r["location"] or "",
-                "for_trade": False,
-                "notes": r["notes"] or "",
-                "has_foil": False,
-            }
-            out[cid] = rec
-        owned = int(r["owned"] or 0)
-        wanted = int(r["wanted"] or 0)
-        rec["owned"] += owned
-        rec["wanted"] += wanted
-        if foil:
-            rec["owned_foil"] += owned
-            rec["has_foil"] = rec["owned_foil"] > 0
-        else:
-            rec["owned_normal"] += owned
-            rec["condition"] = r["condition"] or rec["condition"]
-            rec["location"] = r["location"] or rec["location"]
-            rec["notes"] = r["notes"] or rec["notes"]
-        rec["for_trade"] = rec["for_trade"] or bool(r["for_trade"])
+        out[int(r["card_id"])] = {
+            "owned": int(r["owned"] or 0),
+            "wanted": int(r["wanted"] or 0),
+            "condition": r["condition"] or "NM",
+            "location": r["location"] or "",
+            "for_trade": bool(r["for_trade"]),
+            "notes": r["notes"] or "",
+        }
     return out
 
 
@@ -117,12 +81,9 @@ def attach_collection(items: list[dict[str, Any]], user_id: int | None) -> list[
     blank = {
         "owned": 0,
         "wanted": 0,
-        "owned_normal": 0,
-        "owned_foil": 0,
         "condition": "NM",
         "location": "",
         "for_trade": False,
-        "has_foil": False,
         "notes": "",
     }
     if not user_id or not items:
@@ -135,12 +96,9 @@ def attach_collection(items: list[dict[str, Any]], user_id: int | None) -> list[
         rec = cmap.get(item["id"], blank)
         item["owned"] = rec["owned"]
         item["wanted"] = rec["wanted"]
-        item["owned_normal"] = rec["owned_normal"]
-        item["owned_foil"] = rec["owned_foil"]
         item["condition"] = rec["condition"]
         item["location"] = rec["location"]
         item["for_trade"] = rec["for_trade"]
-        item["has_foil"] = rec["has_foil"]
         item["notes"] = rec.get("notes") or ""
     return items
 
@@ -151,14 +109,12 @@ def set_collection(
     owned: int | None,
     wanted: int | None,
     *,
-    foil: Any = 0,
     condition: str | None = None,
     location: str | None = None,
     for_trade: bool | None = None,
     notes: str | None = None,
 ) -> dict[str, Any]:
-    foil_n = as_foil(foil)
-    prev = collection_variant(user_id, card_id, foil_n)
+    prev = collection_variant(user_id, card_id)
     owned_n = max(0, min(99, int(owned if owned is not None else prev["owned"])))
     wanted_n = max(0, min(99, int(wanted if wanted is not None else prev["wanted"])))
     cond = (condition if condition is not None else prev["condition"]) or "NM"
@@ -170,20 +126,24 @@ def set_collection(
     note = (notes if notes is not None else prev["notes"]) or ""
     note = note.strip()[:500]
     with get_db() as conn:
-        exists = conn.execute("SELECT id FROM cards WHERE id = ?", (card_id,)).fetchone()
-        if not exists:
+        card = conn.execute(
+            "SELECT id, rarity, card_code FROM cards WHERE id = ?",
+            (card_id,),
+        ).fetchone()
+        if not card:
             raise KeyError("card")
+        foil_n = 1 if is_foil_printing(card["rarity"], card["card_code"]) else 0
         if owned_n == 0 and wanted_n == 0 and not trade and not loc and not note:
             conn.execute(
-                "DELETE FROM collection WHERE user_id = ? AND card_id = ? AND foil = ?",
-                (user_id, card_id, foil_n),
+                "DELETE FROM collection WHERE user_id = ? AND card_id = ?",
+                (user_id, card_id),
             )
         else:
             conn.execute(
                 """
-                INSERT INTO collection(user_id, card_id, foil, owned, wanted, condition, location, for_trade, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(user_id, card_id, foil) DO UPDATE SET
+                INSERT INTO collection(user_id, card_id, owned, wanted, condition, location, for_trade, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, card_id) DO UPDATE SET
                     owned = excluded.owned,
                     wanted = excluded.wanted,
                     condition = excluded.condition,
@@ -191,33 +151,28 @@ def set_collection(
                     for_trade = excluded.for_trade,
                     notes = excluded.notes
                 """,
-                (user_id, card_id, foil_n, owned_n, wanted_n, cond, loc, int(trade), note),
+                (user_id, card_id, owned_n, wanted_n, cond, loc, int(trade), note),
             )
-    totals = collection_map(user_id).get(card_id) or {}
     rec = {
         "owned": owned_n,
         "wanted": wanted_n,
-        "foil": bool(foil_n),
         "condition": cond,
         "location": loc,
         "for_trade": trade,
         "notes": note,
-        "owned_normal": int(totals.get("owned_normal") or 0),
-        "owned_foil": int(totals.get("owned_foil") or 0),
-        "owned_total": int(totals.get("owned") or 0),
+        "foil": bool(foil_n),
     }
-    kind = "Foil" if foil_n else "Normal"
     bits: list[str] = []
     if owned_n != int(prev.get("owned") or 0):
         before = int(prev.get("owned") or 0)
         delta = owned_n - before
         if delta == 1:
-            bits.append(f"{kind} +1 ({before} → {owned_n})")
+            bits.append(f"+1 ({before} → {owned_n})")
         elif delta == -1:
-            bits.append(f"{kind} −1 ({before} → {owned_n})")
+            bits.append(f"−1 ({before} → {owned_n})")
         else:
-            bits.append(f"{kind} {before} → {owned_n}")
-    if not foil_n and wanted_n != int(prev.get("wanted") or 0):
+            bits.append(f"{before} → {owned_n}")
+    if wanted_n != int(prev.get("wanted") or 0):
         bits.append(f"Wunschliste {int(prev.get('wanted') or 0)} → {wanted_n}")
     if cond != (prev.get("condition") or "NM"):
         bits.append(f"Zustand {prev.get('condition') or 'NM'} → {cond}")
@@ -234,7 +189,7 @@ def set_collection(
             f"{card_label(card_id)} — {'; '.join(bits)}",
             card_id=card_id,
             foil=foil_n,
-            detail={"owned": owned_n, "wanted": wanted_n, "foil": foil_n},
+            detail={"owned": owned_n, "wanted": wanted_n},
         )
     return rec
 
@@ -248,8 +203,7 @@ def collection_rows(
                IFNULL(collection.condition, 'NM') AS condition,
                IFNULL(collection.location, '') AS location,
                IFNULL(collection.for_trade, 0) AS for_trade,
-               IFNULL(collection.notes, '') AS notes,
-               IFNULL(collection.foil, 0) AS foil
+               IFNULL(collection.notes, '') AS notes
         FROM collection
         JOIN cards ON cards.id = collection.card_id
         LEFT JOIN editions ON editions.id = cards.edition_id
@@ -270,7 +224,7 @@ def collection_rows(
     if cond:
         sql += " AND IFNULL(collection.condition, 'NM') = ?"
         params.append(cond)
-    sql += " ORDER BY editions.code, cards.card_code, cards.rarity, collection.foil"
+    sql += " ORDER BY editions.code, cards.card_code, cards.rarity"
     with get_db() as conn:
         rows = conn.execute(sql, params).fetchall()
     items = []
@@ -282,7 +236,6 @@ def collection_rows(
         card["location"] = row["location"] or ""
         card["for_trade"] = bool(row["for_trade"])
         card["notes"] = row["notes"] or ""
-        card["foil"] = bool(row["foil"])
         items.append(card)
     from .game import attach_flags
 
@@ -421,13 +374,12 @@ def get_deck(user_id: int, deck_id: int) -> dict[str, Any] | None:
         rows = conn.execute(
             """
             SELECT cards.*, editions.code AS edition_code, editions.name AS edition_name,
-                   deck_cards.qty AS qty,
-                   IFNULL(deck_cards.foil, 0) AS foil
+                   deck_cards.qty AS qty
             FROM cards
             LEFT JOIN editions ON editions.id = cards.edition_id
             JOIN deck_cards ON deck_cards.card_id = cards.id
             WHERE deck_cards.deck_id = ?
-            ORDER BY cards.cost, cards.card_code, foil
+            ORDER BY cards.cost, cards.card_code
             """,
             (deck_id,),
         ).fetchall()
@@ -437,7 +389,6 @@ def get_deck(user_id: int, deck_id: int) -> dict[str, Any] | None:
     for row in rows:
         card = row_to_card(row)
         card["qty"] = int(row["qty"] or 1)
-        card["foil"] = bool(row["foil"])
         cards.append(card)
     attach_flags(cards)
     attach_collection(cards, user_id)
@@ -513,10 +464,9 @@ def delete_deck(user_id: int, deck_id: int) -> bool:
 
 
 def set_deck_card(
-    user_id: int, deck_id: int, card_id: int, qty: int, *, foil: Any = 0
+    user_id: int, deck_id: int, card_id: int, qty: int
 ) -> dict[str, Any] | None:
     qty = max(0, min(99, int(qty)))
-    foil_n = as_foil(foil)
     with get_db() as conn:
         owned = conn.execute(
             "SELECT id, name FROM decks WHERE id = ? AND user_id = ?",
@@ -524,36 +474,40 @@ def set_deck_card(
         ).fetchone()
         if not owned:
             return None
-        if not conn.execute("SELECT id FROM cards WHERE id = ?", (card_id,)).fetchone():
+        card = conn.execute(
+            "SELECT id, rarity, card_code FROM cards WHERE id = ?",
+            (card_id,),
+        ).fetchone()
+        if not card:
             raise KeyError("card")
         prev_row = conn.execute(
-            "SELECT qty FROM deck_cards WHERE deck_id = ? AND card_id = ? AND foil = ?",
-            (deck_id, card_id, foil_n),
+            "SELECT qty FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+            (deck_id, card_id),
         ).fetchone()
         prev_qty = int(prev_row["qty"] if prev_row else 0)
         if qty <= 0:
             conn.execute(
-                "DELETE FROM deck_cards WHERE deck_id = ? AND card_id = ? AND foil = ?",
-                (deck_id, card_id, foil_n),
+                "DELETE FROM deck_cards WHERE deck_id = ? AND card_id = ?",
+                (deck_id, card_id),
             )
         else:
             conn.execute(
                 """
-                INSERT INTO deck_cards(deck_id, card_id, foil, qty) VALUES (?, ?, ?, ?)
-                ON CONFLICT(deck_id, card_id, foil) DO UPDATE SET qty = excluded.qty
+                INSERT INTO deck_cards(deck_id, card_id, qty) VALUES (?, ?, ?)
+                ON CONFLICT(deck_id, card_id) DO UPDATE SET qty = excluded.qty
                 """,
-                (deck_id, card_id, foil_n, qty),
+                (deck_id, card_id, qty),
             )
         conn.execute(
             "UPDATE decks SET updated_at = datetime('now') WHERE id = ?",
             (deck_id,),
         )
         if prev_qty != qty:
-            kind = "Foil" if foil_n else "Normal"
+            foil_n = 1 if is_foil_printing(card["rarity"], card["card_code"]) else 0
             log_activity(
                 user_id,
                 "deck_card",
-                f"Deck {owned['name']}: {card_label(card_id, conn)} {kind} {prev_qty} → {qty}",
+                f"Deck {owned['name']}: {card_label(card_id, conn)} {prev_qty} → {qty}",
                 card_id=card_id,
                 deck_id=deck_id,
                 foil=foil_n,

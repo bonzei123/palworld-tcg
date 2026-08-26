@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -495,14 +496,13 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS collection (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
-    foil INTEGER NOT NULL DEFAULT 0,
     owned INTEGER NOT NULL DEFAULT 0,
     wanted INTEGER NOT NULL DEFAULT 0,
     condition TEXT DEFAULT 'NM',
     location TEXT DEFAULT '',
     for_trade INTEGER DEFAULT 0,
     notes TEXT DEFAULT '',
-    PRIMARY KEY (user_id, card_id, foil)
+    PRIMARY KEY (user_id, card_id)
 );
 CREATE INDEX IF NOT EXISTS idx_collection_user ON collection(user_id);
 
@@ -519,9 +519,8 @@ CREATE INDEX IF NOT EXISTS idx_decks_user ON decks(user_id);
 CREATE TABLE IF NOT EXISTS deck_cards (
     deck_id INTEGER NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
     card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
-    foil INTEGER NOT NULL DEFAULT 0,
     qty INTEGER NOT NULL DEFAULT 1,
-    PRIMARY KEY (deck_id, card_id, foil)
+    PRIMARY KEY (deck_id, card_id)
 );
 
 CREATE TABLE IF NOT EXISTS chat_cache (
@@ -585,73 +584,177 @@ def _table_pk(conn: sqlite3.Connection, table: str) -> list[str]:
     return [r[1] for r in sorted((r for r in rows if r[5]), key=lambda r: int(r[5]))]
 
 
-def _rebuild_foil_pk(conn: sqlite3.Connection) -> None:
-    plans = (
-        (
-            "collection",
-            ["user_id", "card_id", "foil"],
+FOIL_RARITIES = frozenset({"SR", "OSR", "SP", "SSP", "SSS", "TSR", "TSP"})
+_FOIL_PREF = ("TSR", "TSP", "SR", "OSR", "SSP", "SP", "SSS")
+_CODE_BASE_RE = re.compile(r"^([A-Z0-9]+-\d+)", re.I)
+
+
+def _base_code(code: str | None) -> str:
+    raw = (code or "").strip().upper()
+    m = _CODE_BASE_RE.match(raw)
+    return m.group(1) if m else raw
+
+
+def is_foil_printing(rarity: str | None = None, card_code: str | None = None) -> bool:
+    rare = (rarity or "").strip().upper()
+    if rare in FOIL_RARITIES:
+        return True
+    raw = (card_code or "").strip().upper()
+    base = _base_code(raw)
+    suffix = raw[len(base) :] if base and raw.startswith(base) else ""
+    return suffix in FOIL_RARITIES
+
+
+def foil_targets(conn: sqlite3.Connection) -> dict[int, int]:
+    rows = conn.execute("SELECT id, card_code, rarity FROM cards").fetchall()
+    by_base: dict[str, list[sqlite3.Row]] = {}
+    for row in rows:
+        by_base.setdefault(_base_code(row["card_code"]), []).append(row)
+    out: dict[int, int] = {}
+    for row in rows:
+        cid = int(row["id"])
+        if is_foil_printing(row["rarity"], row["card_code"]):
+            out[cid] = cid
+            continue
+        foils = [
+            sib
+            for sib in by_base.get(_base_code(row["card_code"]), [])
+            if is_foil_printing(sib["rarity"], sib["card_code"])
+        ]
+        if not foils:
+            out[cid] = cid
+            continue
+        foils.sort(
+            key=lambda sib: _FOIL_PREF.index((sib["rarity"] or "").upper())
+            if (sib["rarity"] or "").upper() in _FOIL_PREF
+            else 99
+        )
+        out[cid] = int(foils[0]["id"])
+    return out
+
+
+def _drop_foil_dimension(conn: sqlite3.Connection) -> None:
+    coll_info = conn.execute("PRAGMA table_info(collection)").fetchall()
+    deck_info = conn.execute("PRAGMA table_info(deck_cards)").fetchall()
+    coll_cols = {r[1] for r in coll_info}
+    deck_cols = {r[1] for r in deck_info}
+    coll_done = coll_info and "foil" not in coll_cols and _table_pk(conn, "collection") == ["user_id", "card_id"]
+    deck_done = (not deck_info) or (
+        "foil" not in deck_cols and _table_pk(conn, "deck_cards") == ["deck_id", "card_id"]
+    )
+    if coll_done and deck_done:
+        return
+
+    targets = foil_targets(conn) if coll_info or deck_info else {}
+
+    pulls_cols = {r[1] for r in conn.execute("PRAGMA table_info(pulls)").fetchall()}
+    if "foil" in pulls_cols and targets:
+        for row in conn.execute("SELECT id, card_id, foil FROM pulls").fetchall():
+            if not row["foil"]:
+                continue
+            new_id = targets.get(int(row["card_id"]), int(row["card_id"]))
+            if new_id != int(row["card_id"]):
+                conn.execute("UPDATE pulls SET card_id = ? WHERE id = ?", (new_id, row["id"]))
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+
+    if coll_info and not coll_done:
+        merged: dict[tuple[int, int], dict[str, Any]] = {}
+        for row in conn.execute("SELECT * FROM collection").fetchall():
+            cid = int(row["card_id"])
+            if "foil" in coll_cols and row["foil"]:
+                cid = targets.get(cid, cid)
+            key = (int(row["user_id"]), cid)
+            rec = merged.get(key)
+            owned = int(row["owned"] or 0)
+            wanted = int(row["wanted"] or 0)
+            if rec is None:
+                merged[key] = {
+                    "owned": owned,
+                    "wanted": wanted,
+                    "condition": (row["condition"] if "condition" in coll_cols else None) or "NM",
+                    "location": (row["location"] if "location" in coll_cols else None) or "",
+                    "for_trade": int(bool(row["for_trade"])) if "for_trade" in coll_cols else 0,
+                    "notes": (row["notes"] if "notes" in coll_cols else None) or "",
+                }
+                continue
+            rec["owned"] += owned
+            rec["wanted"] = max(rec["wanted"], wanted)
+            rec["for_trade"] = int(bool(rec["for_trade"] or (row["for_trade"] if "for_trade" in coll_cols else 0)))
+            loc = (row["location"] if "location" in coll_cols else None) or ""
+            note = (row["notes"] if "notes" in coll_cols else None) or ""
+            if loc and not rec["location"]:
+                rec["location"] = loc
+            if note and not rec["notes"]:
+                rec["notes"] = note
+            cond = (row["condition"] if "condition" in coll_cols else None) or "NM"
+            if rec["condition"] == "NM" and cond != "NM":
+                rec["condition"] = cond
+        conn.execute("ALTER TABLE collection RENAME TO collection_mig")
+        conn.executescript(
             """
             CREATE TABLE collection (
                 user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
-                foil INTEGER NOT NULL DEFAULT 0,
                 owned INTEGER NOT NULL DEFAULT 0,
                 wanted INTEGER NOT NULL DEFAULT 0,
                 condition TEXT DEFAULT 'NM',
                 location TEXT DEFAULT '',
                 for_trade INTEGER DEFAULT 0,
                 notes TEXT DEFAULT '',
-                PRIMARY KEY (user_id, card_id, foil)
+                PRIMARY KEY (user_id, card_id)
             );
             CREATE INDEX IF NOT EXISTS idx_collection_user ON collection(user_id);
+            """
+        )
+        conn.executemany(
+            """
+            INSERT INTO collection(user_id, card_id, owned, wanted, condition, location, for_trade, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("user_id", "card_id", "foil", "owned", "wanted", "condition", "location", "for_trade", "notes"),
-        ),
-        (
-            "deck_cards",
-            ["deck_id", "card_id", "foil"],
+            [
+                (
+                    user_id,
+                    card_id,
+                    rec["owned"],
+                    rec["wanted"],
+                    rec["condition"] or "NM",
+                    rec["location"] or "",
+                    int(rec["for_trade"] or 0),
+                    rec["notes"] or "",
+                )
+                for (user_id, card_id), rec in merged.items()
+                if rec["owned"] or rec["wanted"] or rec["for_trade"] or rec["location"] or rec["notes"]
+            ],
+        )
+        conn.execute("DROP TABLE collection_mig")
+
+    if deck_info and not deck_done:
+        merged_deck: dict[tuple[int, int], int] = {}
+        for row in conn.execute("SELECT * FROM deck_cards").fetchall():
+            cid = int(row["card_id"])
+            if "foil" in deck_cols and row["foil"]:
+                cid = targets.get(cid, cid)
+            key = (int(row["deck_id"]), cid)
+            merged_deck[key] = merged_deck.get(key, 0) + int(row["qty"] or 0)
+        conn.execute("ALTER TABLE deck_cards RENAME TO deck_cards_mig")
+        conn.executescript(
             """
             CREATE TABLE deck_cards (
                 deck_id INTEGER NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
                 card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
-                foil INTEGER NOT NULL DEFAULT 0,
                 qty INTEGER NOT NULL DEFAULT 1,
-                PRIMARY KEY (deck_id, card_id, foil)
+                PRIMARY KEY (deck_id, card_id)
             );
-            """,
-            ("deck_id", "card_id", "foil", "qty"),
-        ),
-    )
-    for table, want_pk, create_sql, dest_cols in plans:
-        info = conn.execute(f"PRAGMA table_info({table})").fetchall()
-        if not info:
-            continue
-        if _table_pk(conn, table) == want_pk:
-            continue
-        old_cols = {r[1] for r in info}
-        select_parts = []
-        for col in dest_cols:
-            if col in old_cols:
-                select_parts.append(col)
-            elif col == "foil":
-                select_parts.append("0")
-            elif col == "condition":
-                select_parts.append("'NM'")
-            elif col in {"location", "notes"}:
-                select_parts.append("''")
-            elif col in {"for_trade", "owned", "wanted", "qty"}:
-                select_parts.append("0")
-            else:
-                select_parts.append("NULL")
-        tmp = f"{table}_mig"
-        conn.execute("PRAGMA foreign_keys = OFF")
-        conn.execute(f"ALTER TABLE {table} RENAME TO {tmp}")
-        conn.executescript(create_sql)
-        conn.execute(
-            f"INSERT INTO {table} ({', '.join(dest_cols)}) SELECT {', '.join(select_parts)} FROM {tmp}"
+            """
         )
-        conn.execute(f"DROP TABLE {tmp}")
-        conn.execute("PRAGMA foreign_keys = ON")
+        conn.executemany(
+            "INSERT INTO deck_cards(deck_id, card_id, qty) VALUES (?, ?, ?)",
+            [(deck_id, card_id, qty) for (deck_id, card_id), qty in merged_deck.items() if qty > 0],
+        )
+        conn.execute("DROP TABLE deck_cards_mig")
+
+    conn.execute("PRAGMA foreign_keys = ON")
 
 
 def init_db() -> None:
@@ -675,7 +778,7 @@ def init_db() -> None:
         _ensure_column(conn, "collection", "for_trade", "INTEGER DEFAULT 0")
         _ensure_column(conn, "collection", "notes", "TEXT DEFAULT ''")
         _ensure_column(conn, "pulls", "foil", "INTEGER DEFAULT 0")
-        _rebuild_foil_pk(conn)
+        _drop_foil_dimension(conn)
         conn.commit()
         fts_n = conn.execute("SELECT COUNT(*) AS n FROM cards_fts").fetchone()["n"]
         cards_n = conn.execute("SELECT COUNT(*) AS n FROM cards").fetchone()["n"]

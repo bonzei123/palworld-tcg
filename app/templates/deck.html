@@ -16,8 +16,7 @@
         <section>
             <h2>Karten suchen</h2>
             <input type="search" id="deck-q" placeholder="Name oder Code…">
-            <label class="check deck-foil-add"><input type="checkbox" id="deck-foil"> Neue Karten als Foil</label>
-            <p class="muted">Karten hierher oder in die Liste ziehen, um sie hinzuzufügen.</p>
+            <p class="muted">Karten hierher oder in die Liste ziehen, um sie hinzuzufügen. Foil-Drucke (TSR, SR, …) sind eigene Karten.</p>
             <div id="deck-search" class="search-hits"></div>
             <h2>Deck <span class="muted">50 Karten</span></h2>
             <ul class="deck-cards" id="deck-cards"></ul>
@@ -46,5 +45,5 @@
 </article>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/deck.js?v=13" defer></script>
+<script src="/static/js/deck.js?v=16" defer></script>
 {% endblock %}

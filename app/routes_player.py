@@ -11,7 +11,6 @@ from .activity import list_activity
 from .auth import current_user, login_user, register_user, require_user
 from .db import get_db, get_setting
 from .player import (
-    as_foil,
     collection_locations,
     collection_rows,
     collection_summary,
@@ -39,6 +38,7 @@ from .game import (
     list_pulls,
     pal_family as pal_family,
     parse_deck_text as parse_deck_text,
+    prefer_foil_printing,
     random_booster as random_booster,
     save_banlist,
     save_notes,
@@ -151,7 +151,6 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
                 card_id,
                 body.get("owned"),
                 body.get("wanted"),
-                foil=body.get("foil"),
                 condition=body.get("condition"),
                 location=body.get("location"),
                 for_trade=body.get("for_trade"),
@@ -241,7 +240,6 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
                 deck_id,
                 card_id,
                 int(body.get("qty") or 0),
-                foil=body.get("foil"),
             )
         except KeyError:
             raise HTTPException(404, "Karte nicht gefunden") from None
@@ -357,13 +355,15 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
         if len(matches) > 1 and not body.get("card_id"):
             return {"ok": False, "need_pick": True, "items": matches}
         card_id = int(body.get("card_id") or matches[0]["id"])
+        foil_flag = body.get("foil")
+        if foil_flag is True or foil_flag == 1 or str(foil_flag).strip().lower() in {"1", "true", "yes", "on", "foil"}:
+            card_id = prefer_foil_printing(card_id)
         qty = max(1, min(99, int(body.get("owned") or 1)))
-        foil = as_foil(body.get("foil"))
-        prev = collection_variant(user["id"], card_id, foil)
-        rec = set_collection(user["id"], card_id, int(prev.get("owned") or 0) + qty, None, foil=foil)
+        prev = collection_variant(user["id"], card_id)
+        rec = set_collection(user["id"], card_id, int(prev.get("owned") or 0) + qty, None)
         source = str(body.get("source") or "").strip()
         if source:
-            add_pull(user["id"], card_id, source, qty, increment=False, foil=foil)
+            add_pull(user["id"], card_id, source, qty, increment=False)
         return {"ok": True, **rec, "card": next((c for c in matches if c["id"] == card_id), matches[0])}
 
     @app.post("/api/pulls")
@@ -376,7 +376,6 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
                 int(body.get("card_id")),
                 str(body.get("source") or ""),
                 int(body.get("qty") or 1),
-                foil=body.get("foil"),
             )
         except (KeyError, TypeError, ValueError):
             raise HTTPException(400, "Karte oder Display fehlt.") from None

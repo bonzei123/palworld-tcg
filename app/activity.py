@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .db import get_db
+from .db import get_db, is_foil_printing
 
 KEEP = 2000
 SHOW = 200
@@ -86,7 +86,7 @@ def list_activity(user_id: int, limit: int = SHOW) -> list[dict[str, Any]]:
     items = []
     for row in rows:
         item = dict(row)
-        item["foil"] = bool(row["foil"])
+        item["foil"] = is_foil_printing(row["rarity"], row["card_code"])
         path = row["image_path"]
         item["image_url"] = "/images/" + str(path).replace("\\", "/") if path else None
         items.append(item)

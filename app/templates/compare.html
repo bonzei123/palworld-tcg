@@ -19,7 +19,7 @@
             <p class="card-code">{{ c.card_code }} · {{ c.rarity or '—' }}</p>
             <p>{{ c.edition_code }} · {{ c.card_type or '' }}</p>
             {% if user %}
-            <p class="muted">Habe {{ c.owned or 0 }}{% if c.owned_foil %} · davon {{ c.owned_foil }} Foil{% endif %} · brauche {{ c.wanted or 0 }}</p>
+            <p class="muted">Habe {{ c.owned or 0 }} · brauche {{ c.wanted or 0 }}</p>
             {% endif %}
             <a href="/card/{{ c.id }}">Details</a>
         </article>

@@ -332,33 +332,30 @@
     const AUTH = document.body?.dataset.auth === "1";
     const CONDITIONS = ["NM", "LP", "MP", "HP", "Played"];
 
-    function haveText(n, f) {
+    function haveText(n) {
         n = Number(n) || 0;
-        f = Number(f) || 0;
-        if (n + f <= 0) return "Noch nicht in der Sammlung.";
-        return `Im Besitz: ${n + f} (${n} normal, ${f} Foil)`;
+        if (n <= 0) return "Noch nicht in der Sammlung.";
+        return `Im Besitz: ${n}`;
     }
 
     function qtyMarkup(card) {
         if (!AUTH) {
             return `<p class="muted"><a href="/konto?next=/card/${card.id}">Anmelden</a>, um Besitz zu speichern und Karten hinzuzufügen.</p>`;
         }
-        const n = Number(card.owned_normal || 0);
-        const f = Number(card.owned_foil || 0);
+        const n = Number(card.owned || 0);
         const w = Number(card.wanted || 0);
         const cond = card.condition || "NM";
         const opts = CONDITIONS.map((c) => `<option${c === cond ? " selected" : ""}>${c}</option>`).join("");
+        const foilBadge = card.foil ? ` <span class="badge foil">Foil</span>` : "";
         return `
             <section class="qty-panel" data-collection="${card.id}">
                 <div class="qty-head">
-                    <h2>Sammlung</h2>
-                    <p class="have-line" data-have-line>${esc(haveText(n, f))}</p>
+                    <h2>Sammlung${foilBadge}</h2>
+                    <p class="have-line" data-have-line>${esc(haveText(n))}</p>
                 </div>
                 <div class="qty-row">
                     <label>Habe ich <input type="number" min="0" max="99" value="${n}" data-owned></label>
                     <button type="button" class="ghost" data-add-copy="0">+1</button>
-                    <label>Foil <input type="number" min="0" max="99" value="${f}" data-owned-foil></label>
-                    <button type="button" class="ghost" data-add-copy="1">+1 Foil</button>
                     <label>Brauche ich <input type="number" min="0" max="99" value="${w}" data-wanted></label>
                     <label>Zustand <select data-condition>${opts}</select></label>
                     <label>Lagerort <input type="text" value="${esc(card.location || "")}" data-location placeholder="Binder A"></label>
@@ -378,53 +375,37 @@
         return res.json();
     }
 
-    function payloadFromPanel(panel, foil, ownedOverride) {
-        const foilN = foil ? 1 : 0;
+    function payloadFromPanel(panel, ownedOverride) {
         let owned = ownedOverride;
         if (owned == null) {
-            owned = foilN
-                ? Number(panel.querySelector("[data-owned-foil]")?.value || 0)
-                : Number(panel.querySelector("[data-owned]")?.value || 0);
+            owned = Number(panel.querySelector("[data-owned]")?.value || 0);
         }
         return {
             owned,
-            wanted: foilN ? 0 : Number(panel.querySelector("[data-wanted]")?.value || 0),
+            wanted: Number(panel.querySelector("[data-wanted]")?.value || 0),
             condition: panel.querySelector("[data-condition]")?.value,
             location: panel.querySelector("[data-location]")?.value,
             for_trade: panel.querySelector("[data-trade]")?.checked || false,
-            foil: foilN,
         };
     }
 
     function applyHave(panel, rec) {
-        const n = rec.owned_normal ?? Number(panel.querySelector("[data-owned]")?.value || 0);
-        const f = rec.owned_foil ?? Number(panel.querySelector("[data-owned-foil]")?.value || 0);
+        const n = rec.owned ?? Number(panel.querySelector("[data-owned]")?.value || 0);
         const ownedInput = panel.querySelector("[data-owned]");
-        const foilInput = panel.querySelector("[data-owned-foil]");
-        if (ownedInput && rec.owned_normal != null) ownedInput.value = rec.owned_normal;
-        if (foilInput && rec.owned_foil != null) foilInput.value = rec.owned_foil;
+        if (ownedInput && rec.owned != null) ownedInput.value = rec.owned;
         const line = panel.querySelector("[data-have-line]");
-        if (line) line.textContent = haveText(n, f);
+        if (line) line.textContent = haveText(n);
         const id = panel.getAttribute("data-collection");
         document.querySelectorAll("[data-have-chip]").forEach((chip) => {
             if (chip.getAttribute("data-card-id") && chip.getAttribute("data-card-id") !== id) return;
-            chip.textContent = n + f > 0
-                ? `${n + f}× in der Sammlung${f ? " · " + f + " Foil" : ""}`
-                : "Nicht in der Sammlung";
+            chip.textContent = n > 0 ? `${n}× in der Sammlung` : "Nicht in der Sammlung";
         });
     }
 
     async function savePanel(panel) {
         const id = panel.getAttribute("data-collection");
         const status = panel.querySelector("[data-qty-status]");
-        const foilBox = panel.querySelector("[data-foil]");
-        const foilInput = panel.querySelector("[data-owned-foil]");
-        let foilQty = Number(foilInput?.value || 0);
-        if (foilBox && foilBox.checked && foilQty < 1) foilQty = 1;
-        if (foilBox && !foilBox.checked) foilQty = 0;
-        if (foilInput) foilInput.value = foilQty;
-        await putCollection(id, payloadFromPanel(panel, false));
-        const rec = await putCollection(id, payloadFromPanel(panel, true, foilQty));
+        const rec = await putCollection(id, payloadFromPanel(panel));
         if (status) status.textContent = rec.ok ? "Gespeichert." : (rec.detail || "Fehler.");
         if (rec && rec.ok) applyHave(panel, rec);
         return rec;
@@ -435,15 +416,12 @@
         if (add) {
             const panel = add.closest("[data-collection]");
             if (!panel) return;
-            const foil = add.getAttribute("data-add-copy") === "1";
-            const input = panel.querySelector(foil ? "[data-owned-foil]" : "[data-owned]");
+            const input = panel.querySelector("[data-owned]");
             const next = Math.min(99, Number(input?.value || 0) + 1);
             if (input) input.value = next;
-            const foilBox = panel.querySelector("[data-foil]");
-            if (foil && foilBox) foilBox.checked = next > 0;
-            const rec = await putCollection(panel.getAttribute("data-collection"), payloadFromPanel(panel, foil, next));
+            const rec = await putCollection(panel.getAttribute("data-collection"), payloadFromPanel(panel, next));
             const status = panel.querySelector("[data-qty-status]");
-            if (status) status.textContent = rec.ok ? (foil ? "Foil hinzugefügt." : "Karte hinzugefügt.") : (rec.detail || "Fehler.");
+            if (status) status.textContent = rec.ok ? "Karte hinzugefügt." : (rec.detail || "Fehler.");
             if (rec && rec.ok) applyHave(panel, rec);
             return;
         }
@@ -495,12 +473,12 @@
             card.edition_code ? ["Edition", card.edition_code] : null,
             card.copy_limit ? ["Kopien", "max. " + card.copy_limit] : null,
         ].filter(Boolean).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("");
-        const n = Number(card.owned_normal || 0);
-        const f = Number(card.owned_foil || 0);
+        const n = Number(card.owned || 0);
         const chip = AUTH
-            ? `<p class="have-chip" data-have-chip data-card-id="${card.id}">${esc(n + f > 0 ? `${n + f}× in der Sammlung${f ? " · " + f + " Foil" : ""}` : "Nicht in der Sammlung")}</p>`
+            ? `<p class="have-chip" data-have-chip data-card-id="${card.id}">${esc(n > 0 ? `${n}× in der Sammlung` : "Nicht in der Sammlung")}</p>`
             : "";
         const flags = [
+            card.foil ? `<span class="badge foil">Foil</span>` : "",
             card.banned ? `<span class="badge ban">Ban</span>` : "",
             card.has_errata ? `<span class="badge errata">Errata</span>` : "",
         ].join("");
@@ -604,7 +582,7 @@
             return;
         }
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
-        if (e.target.closest("input, textarea, select, [data-add], [data-qty], [data-add-copy], [data-save-qty], [data-tile-add], .tile-actions, .js-full-card, .kw, .kw-tip, .qty-panel, [data-foil-toggle], [data-wish], #card-view-back, #card-view-close")) return;
+        if (e.target.closest("input, textarea, select, [data-add], [data-qty], [data-add-copy], [data-save-qty], [data-tile-add], .tile-actions, .js-full-card, .kw, .kw-tip, .qty-panel, [data-wish], #card-view-back, #card-view-close")) return;
         const el = e.target.closest("a[href^='/card/'], .card-tile[data-card-id]");
         if (!el) return;
         const id = cardIdFrom(el);

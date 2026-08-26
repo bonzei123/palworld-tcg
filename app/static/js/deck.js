@@ -33,22 +33,14 @@ function isSoul(card) {
     return kind === "soul" || name === "soul" || card.is_soul;
 }
 
-function addFoil() {
-    return document.getElementById("deck-foil")?.checked ? 1 : 0;
-}
-
 function cardRow(c) {
     const color = colorClass(c.color);
-    const foil = c.foil ? 1 : 0;
     return `
         <li class="${c.illegal ? "is-illegal" : ""} ${c.can_play === false ? "is-missing" : ""} ${c.foil ? "is-foil" : ""}"
             data-card-id="${c.id}" data-hover="${esc(c.image_url || "")}" draggable="true">
             <a href="/card/${c.id}">${esc(c.card_code)} · ${esc(c.name)}</a>
-            <span><span class="color-${color}">${esc(c.color || "Colorless")}</span> · Cost ${c.cost ?? "—"} · habe ${c.owned_base ?? c.owned ?? 0}${c.banned ? " · Ban" : ""}</span>
-            <button type="button" class="foil-toggle ${c.foil ? "is-on" : ""}" data-foil-toggle="${c.id}" data-foil="${foil}" data-qty="${c.qty}" title="Foil oder normal">
-                ${c.foil ? "Foil" : "Normal"}
-            </button>
-            <input type="number" min="0" max="${c.copy_limit || 4}" value="${c.qty}" data-qty="${c.id}" data-foil="${foil}">
+            <span><span class="color-${color}">${esc(c.color || "Colorless")}</span> · Cost ${c.cost ?? "—"} · habe ${c.owned_base ?? c.owned ?? 0}${c.banned ? " · Ban" : ""}${c.foil ? ' · <span class="badge foil">Foil</span>' : ""}</span>
+            <input type="number" min="0" max="${c.copy_limit || 4}" value="${c.qty}" data-qty="${c.id}">
         </li>
     `;
 }
@@ -105,28 +97,20 @@ async function refresh() {
     render(await res.json());
 }
 
-async function setQty(cardId, qty, foil) {
+async function setQty(cardId, qty) {
     const res = await fetch(`/api/decks/${deckId}/cards/${cardId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ qty: Number(qty), foil: Number(foil || 0) }),
+        body: JSON.stringify({ qty: Number(qty) }),
     });
     render(await res.json());
-}
-
-async function toggleFoil(cardId, fromFoil, qty) {
-    const toFoil = fromFoil ? 0 : 1;
-    const other = document.querySelector(`[data-qty="${cardId}"][data-foil="${toFoil}"]`);
-    const otherQty = other ? Number(other.value || 0) : 0;
-    await setQty(cardId, 0, fromFoil);
-    await setQty(cardId, otherQty + Number(qty || 0), toFoil);
 }
 
 async function addWish(cardId, wanted) {
     await fetch("/api/collection/" + cardId, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wanted: Number(wanted), foil: 0 }),
+        body: JSON.stringify({ wanted: Number(wanted) }),
     });
 }
 
@@ -150,17 +134,15 @@ searchBox.addEventListener("input", () => {
 hits.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-add]");
     if (!btn) return;
-    const foil = addFoil();
-    const input = document.querySelector(`[data-qty="${btn.dataset.add}"][data-foil="${foil}"]`);
+    const input = document.querySelector(`[data-qty="${btn.dataset.add}"]`);
     const qty = input ? Number(input.value || 0) + 1 : 1;
-    setQty(btn.dataset.add, qty, foil);
+    setQty(btn.dataset.add, qty);
 });
 
 hits.addEventListener("dragstart", (e) => {
     const btn = e.target.closest("[data-add]");
     if (!btn) return;
     e.dataTransfer.setData("text/plain", btn.dataset.add);
-    e.dataTransfer.setData("application/x-pal-foil", String(addFoil()));
     e.dataTransfer.effectAllowed = "copy";
 });
 
@@ -176,10 +158,9 @@ function bindDrop(el) {
         el.classList.remove("is-drop");
         const id = e.dataTransfer.getData("text/plain");
         if (!id || !/^\d+$/.test(id)) return;
-        const foil = Number(e.dataTransfer.getData("application/x-pal-foil") || addFoil() || 0);
-        const input = document.querySelector(`[data-qty="${id}"][data-foil="${foil}"]`);
+        const input = document.querySelector(`[data-qty="${id}"]`);
         const qty = input ? Number(input.value || 0) + 1 : 1;
-        setQty(id, qty, foil);
+        setQty(id, qty);
     });
 }
 bindDrop(list);
@@ -188,15 +169,10 @@ bindDrop(hits);
 
 function onListChange(e) {
     const input = e.target.closest("[data-qty]");
-    if (input && input.tagName === "INPUT") setQty(input.dataset.qty, input.value, input.dataset.foil);
+    if (input && input.tagName === "INPUT") setQty(input.dataset.qty, input.value);
 }
 
 function onListClick(e) {
-    const tog = e.target.closest("[data-foil-toggle]");
-    if (tog) {
-        toggleFoil(tog.getAttribute("data-foil-toggle"), tog.getAttribute("data-foil") === "1", tog.getAttribute("data-qty"));
-        return;
-    }
     const wish = e.target.closest("[data-wish]");
     if (wish) {
         addWish(wish.dataset.wish, wish.dataset.want).then(() => {

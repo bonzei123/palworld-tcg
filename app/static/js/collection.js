@@ -166,18 +166,17 @@ if (body) {
         renderSummary(data.summary);
         fillLocations(data.locations || []);
         body.innerHTML = data.items.map((c) => `
-            <tr data-id="${c.id}" data-foil="${c.foil ? 1 : 0}" data-card-id="${c.id}" data-hover="${esc(c.image_url || "")}">
+            <tr data-id="${c.id}" data-card-id="${c.id}" data-hover="${esc(c.image_url || "")}">
                 <td data-label="">${c.image_url ? `<img src="${esc(c.image_url)}" alt="" width="36"${c.landscape ? ' class="landscape"' : ""}>` : ""}</td>
                 <td data-label="Karte"><a href="/card/${c.id}" data-card-id="${c.id}" data-hover="${esc(c.image_url || "")}"><strong>${esc(c.name)}</strong></a><br><code>${esc(c.card_code)}</code> · ${esc(c.rarity)}${c.foil ? ' <span class="badge foil">Foil</span>' : ""}${c.banned ? ' <span class="badge ban">Ban</span>' : ""}${c.has_errata ? ' <span class="badge errata">Errata</span>' : ""}</td>
                 <td data-label="Habe"><input type="number" min="0" max="99" value="${c.owned || 0}" data-owned></td>
                 <td data-label="Brauche"><input type="number" min="0" max="99" value="${c.wanted || 0}" data-wanted></td>
-                <td data-label="Foil"><input type="checkbox" data-row-foil ${c.foil ? "checked" : ""} disabled></td>
                 <td data-label="Zustand"><select data-condition>${conds.map((x) => `<option${(c.condition || "NM") === x ? " selected" : ""}>${x}</option>`).join("")}</select></td>
                 <td data-label="Ort"><input type="text" value="${esc(c.location || "")}" data-location></td>
                 <td data-label="Tausch"><input type="checkbox" data-trade ${c.for_trade ? "checked" : ""}></td>
                 <td data-label=""><button type="button" class="ghost" data-save>OK</button></td>
             </tr>
-        `).join("") || `<tr><td colspan="9">Keine Einträge. Code oben eintragen oder im Katalog Besitz setzen.</td></tr>`;
+        `).join("") || `<tr><td colspan="8">Keine Einträge. Code oben eintragen oder im Katalog Besitz setzen.</td></tr>`;
     }
 
     document.getElementById("coll-tabs")?.addEventListener("click", (e) => {
@@ -209,7 +208,6 @@ if (body) {
             condition: tr.querySelector("[data-condition]").value,
             location: tr.querySelector("[data-location]").value,
             for_trade: tr.querySelector("[data-trade]").checked,
-            foil: Number(tr.dataset.foil || 0),
         });
         loadCollection();
         loadProgress();
@@ -243,7 +241,6 @@ if (body) {
             pickGrid.dataset.code = payload.code;
             pickGrid.dataset.owned = payload.owned;
             pickGrid.dataset.source = payload.source || "";
-            pickGrid.dataset.foil = payload.foil ? "1" : "";
             return;
         }
         pickGrid.hidden = true;
@@ -261,7 +258,6 @@ if (body) {
             code: String(fd.get("code") || "").trim(),
             owned: Number(fd.get("owned") || 1),
             source: String(fd.get("source") || "").trim(),
-            foil: fd.get("foil") === "on",
         });
     });
 
@@ -273,7 +269,6 @@ if (body) {
             owned: Number(pickGrid.dataset.owned || 1),
             source: pickGrid.dataset.source || "",
             card_id: Number(btn.dataset.pick),
-            foil: pickGrid.dataset.foil === "1",
         });
     });
 

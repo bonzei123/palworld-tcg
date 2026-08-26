@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from .activity import card_label, log_activity
-from .db import get_db, get_setting, row_to_card, set_setting
+from .db import get_db, get_setting, is_foil_printing, foil_targets, row_to_card, set_setting
 
 CARD_SELECT = """
 SELECT cards.*, editions.code AS edition_code, editions.name AS edition_name
@@ -140,6 +140,7 @@ def card_flags(card: dict[str, Any], banned: set[str] | None = None, errata: str
         "base_code": code,
         "pal_line": pal_line(card.get("name")),
         "copy_limit": copy_limit(card),
+        "foil": is_foil_printing(card.get("rarity"), card.get("card_code")),
     }
 
 
@@ -151,6 +152,11 @@ def attach_flags(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for item in items:
         item.update(card_flags(item, banned, errata))
     return items
+
+
+def prefer_foil_printing(card_id: int) -> int:
+    with get_db() as conn:
+        return foil_targets(conn).get(int(card_id), int(card_id))
 
 
 def save_banlist(text: str) -> None:
@@ -467,23 +473,24 @@ def add_pull(
     qty: int = 1,
     *,
     increment: bool = True,
-    foil: Any = 0,
 ) -> dict[str, Any]:
-    from .player import as_foil
-
     qty = max(1, min(36, int(qty)))
     source = (source or "").strip()[:80] or "Display"
-    foil_n = as_foil(foil)
     with get_db() as conn:
-        if not conn.execute("SELECT id FROM cards WHERE id = ?", (card_id,)).fetchone():
+        card = conn.execute(
+            "SELECT id, rarity, card_code FROM cards WHERE id = ?",
+            (card_id,),
+        ).fetchone()
+        if not card:
             raise KeyError("card")
+        foil_n = 1 if is_foil_printing(card["rarity"], card["card_code"]) else 0
         conn.execute(
             "INSERT INTO pulls(user_id, card_id, source, qty, foil) VALUES (?, ?, ?, ?, ?)",
             (user_id, card_id, source, qty, foil_n),
         )
         row = conn.execute(
-            "SELECT owned, wanted FROM collection WHERE user_id = ? AND card_id = ? AND foil = ?",
-            (user_id, card_id, foil_n),
+            "SELECT owned, wanted FROM collection WHERE user_id = ? AND card_id = ?",
+            (user_id, card_id),
         ).fetchone()
         owned = int(row["owned"] if row else 0)
         wanted = int(row["wanted"] if row else 0)
@@ -491,18 +498,17 @@ def add_pull(
             owned += qty
             conn.execute(
                 """
-                INSERT INTO collection(user_id, card_id, foil, owned, wanted)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(user_id, card_id, foil) DO UPDATE SET owned = excluded.owned
+                INSERT INTO collection(user_id, card_id, owned, wanted)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id, card_id) DO UPDATE SET owned = excluded.owned
                 """,
-                (user_id, card_id, foil_n, owned, wanted),
+                (user_id, card_id, owned, wanted),
             )
-        kind = "Foil" if foil_n else "Normal"
         extra = f", Sammlung {owned - qty if increment else owned} → {owned}" if increment else ""
         log_activity(
             user_id,
             "pull",
-            f"Pull · {source}: {card_label(card_id, conn)} {kind} +{qty}{extra}",
+            f"Pull · {source}: {card_label(card_id, conn)} +{qty}{extra}",
             card_id=card_id,
             foil=foil_n,
             conn=conn,
@@ -515,7 +521,6 @@ def list_pulls(user_id: int) -> list[dict[str, Any]]:
         rows = conn.execute(
             """
             SELECT pulls.id, pulls.source, pulls.qty, pulls.created_at,
-                   IFNULL(pulls.foil, 0) AS foil,
                    cards.id AS card_id, cards.card_code, cards.name, cards.rarity,
                    cards.image_path
             FROM pulls
@@ -529,7 +534,7 @@ def list_pulls(user_id: int) -> list[dict[str, Any]]:
     items = []
     for row in rows:
         item = dict(row)
-        item["foil"] = bool(row["foil"])
+        item["foil"] = is_foil_printing(row["rarity"], row["card_code"])
         item["image_url"] = "/images/" + row["image_path"].replace("\\", "/") if row["image_path"] else None
         items.append(item)
     return items
@@ -644,8 +649,7 @@ def random_booster(edition: str | None = None, count: int = 10) -> dict[str, Any
 def deck_text(deck: dict[str, Any]) -> str:
     lines = [f"# {deck.get('name') or 'Deck'}"]
     for card in deck.get("cards") or []:
-        foil = " (Foil)" if card.get("foil") else ""
-        lines.append(f"{card.get('qty') or 1} {card.get('card_code')} {card.get('name')}{foil}")
+        lines.append(f"{card.get('qty') or 1} {card.get('card_code')} {card.get('name')}")
     return "\n".join(lines) + "\n"
 
 
@@ -676,6 +680,7 @@ def apply_deck_import(user_id: int, deck_id: int, items: list[dict[str, Any]]) -
         if not owned:
             raise KeyError("deck")
         conn.execute("DELETE FROM deck_cards WHERE deck_id = ?", (deck_id,))
+        targets = foil_targets(conn)
         for item in items:
             row = None
             if item.get("card_code"):
@@ -690,14 +695,16 @@ def apply_deck_import(user_id: int, deck_id: int, items: list[dict[str, Any]]) -
                 ).fetchone()
             if not row:
                 continue
+            card_id = int(row["id"])
+            if item.get("foil"):
+                card_id = targets.get(card_id, card_id)
             qty = max(1, min(99, int(item.get("qty") or 1)))
-            foil = 1 if item.get("foil") else 0
             conn.execute(
                 """
-                INSERT INTO deck_cards(deck_id, card_id, foil, qty) VALUES (?, ?, ?, ?)
-                ON CONFLICT(deck_id, card_id, foil) DO UPDATE SET qty = qty + excluded.qty
+                INSERT INTO deck_cards(deck_id, card_id, qty) VALUES (?, ?, ?)
+                ON CONFLICT(deck_id, card_id) DO UPDATE SET qty = qty + excluded.qty
                 """,
-                (deck_id, int(row["id"]), foil, qty),
+                (deck_id, card_id, qty),
             )
         conn.execute("UPDATE decks SET updated_at = datetime('now') WHERE id = ?", (deck_id,))
         n = conn.execute(
