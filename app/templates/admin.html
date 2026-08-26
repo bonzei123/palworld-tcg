@@ -18,7 +18,7 @@
     <header class="admin-head">
         <div>
             <p class="kicker">Steuerung</p>
-            <h1>Datenbank &amp; Import</h1>
+            <h1>Datenbank</h1>
         </div>
         <form method="post" action="/admin/logout"><button type="submit" class="ghost">Abmelden</button></form>
     </header>
@@ -220,6 +220,6 @@
 {% endblock %}
 {% block scripts %}
 {% if authed %}
-<script src="/static/js/admin.js" defer></script>
+<script src="/static/js/admin.js?v=13" defer></script>
 {% endif %}
 {% endblock %}

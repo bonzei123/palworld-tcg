@@ -40,11 +40,11 @@
             </p>
             {% endif %}
             <ul class="stat-pills">
-                {% if card.card_type %}<li>{{ card.card_type }}</li>{% endif %}
-                {% if card.subtype %}<li>{{ card.subtype }}</li>{% endif %}
-                {% if card.color %}<li class="color-{{ card.color|lower }}">{{ card.color }}</li>{% endif %}
-                {% for a in card.attributes %}<li>{{ a }}</li>{% endfor %}
-                {% for a in card.aptitudes %}<li class="apt">≪{{ a }}≫</li>{% endfor %}
+                {% if card.card_type %}<li>{{ card.card_type | term_pill }}</li>{% endif %}
+                {% if card.subtype %}<li>{{ card.subtype | term_pill }}</li>{% endif %}
+                {% if card.color %}<li class="color-{{ card.color|lower }}">{{ card.color | term_pill }}</li>{% endif %}
+                {% for a in card.attributes %}<li>{{ a | term_pill }}</li>{% endfor %}
+                {% for a in card.aptitudes %}<li class="apt">{{ a | term_pill('apt', '≪' ~ a ~ '≫') }}</li>{% endfor %}
             </ul>
             <dl class="stat-grid">
                 {% if card.cost is not none %}<div><dt>Cost</dt><dd>{{ card.cost }}</dd></div>{% endif %}
@@ -154,5 +154,5 @@
 </article>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/collection.js" defer></script>
+<script src="/static/js/collection.js?v=13" defer></script>
 {% endblock %}

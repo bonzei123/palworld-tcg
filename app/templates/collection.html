@@ -3,8 +3,8 @@
 {% block content %}
 <section class="hero">
     <div>
-        <p class="kicker">Sammlung · {{ user.username }}</p>
-        <h1>Habe ich, brauche ich, Anzahl.</h1>
+        <p class="kicker">{{ user.username }}</p>
+        <h1>Sammlung</h1>
         <p class="lede" id="summary-line">
             {{ summary.have }} im Besitz · {{ summary.owned }} Exemplare · {{ summary.missing }} fehlend · {{ summary.wanted }} gewünscht
         </p>
@@ -110,5 +110,5 @@
 </section>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/collection.js" defer></script>
+<script src="/static/js/collection.js?v=13" defer></script>
 {% endblock %}

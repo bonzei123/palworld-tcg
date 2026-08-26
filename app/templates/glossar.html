@@ -5,15 +5,23 @@
     <div>
         <p class="kicker">Regeln</p>
         <h1>Glossar</h1>
-        <p class="lede">Schlüsselwörter und Zeitpunkte. Tipps gelten für das Pocketpair Official Card Game.</p>
+        <p class="lede">Kartentypen, Farbe, Element, Work Suitability und Schlüsselwörter aus den Comprehensive Rules.</p>
     </div>
 </section>
+<nav class="glossary-toc" aria-label="Abschnitte">
+    {% for section in sections %}
+    <a href="#sec-{{ loop.index }}">{{ section.title }}</a>
+    {% endfor %}
+</nav>
+{% for section in sections %}
+<h2 class="glossary-heading" id="sec-{{ loop.index }}">{{ section.title }}</h2>
 <ul class="glossary-list">
-    {% for item in keywords %}
-    <li class="glossary-item">
+    {% for item in section.entries %}
+    <li class="glossary-item" id="{{ item.key }}">
         <h2>{{ item.title_html }}</h2>
         <p>{{ item.tip }}</p>
     </li>
     {% endfor %}
 </ul>
+{% endfor %}
 {% endblock %}

@@ -4,8 +4,8 @@
 <section class="hero">
     <div>
         <p class="kicker">{{ stats.editions }} Edition{{ 'en' if stats.editions != 1 else '' }} · {{ stats.cards }} Karten</p>
-        <h1>Finde jede Karte, jede Seltenheit.</h1>
-        <p class="lede">Alle Karten nach Edition und Nummer. Die Suche filtert in Echtzeit über Name, Code, Effekt, Typ und Werte.</p>
+        <h1>Karten</h1>
+        <p class="lede">Suche nach Name, Code, Effekt, Typ und Werten. Filter nach Edition, Seltenheit und Besitz.</p>
     </div>
 </section>
 <form class="searchbar sticky-search" id="search-form" role="search">
@@ -78,5 +78,5 @@
 <div class="pager" id="pager"></div>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/app.js" defer></script>
+<script src="/static/js/app.js?v=13" defer></script>
 {% endblock %}

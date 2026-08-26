@@ -56,12 +56,15 @@ from .db import (
     wipe_catalog,
 )
 from .importer import archive_cardlist, attach_images_from_zip, import_cards
+from .keywords import term_pill, terms_for_client
 from .texticons import render_effect
 
 APP_DIR = Path(__file__).resolve().parent
 ensure_dirs()
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 templates.env.filters["effect_icons"] = render_effect
+templates.env.filters["term_pill"] = term_pill
+templates.env.globals["glossary_json"] = json.dumps(terms_for_client(), ensure_ascii=False)
 
 app = FastAPI(title="Palworld TCG", docs_url=None, redoc_url=None)
 app.add_middleware(
@@ -220,26 +223,24 @@ def index(request: Request) -> HTMLResponse:
 def glossar_page(request: Request) -> HTMLResponse:
     from markupsafe import Markup, escape
 
-    from .keywords import ICON_KEYS, KEYWORDS, wrap_icon
+    from .keywords import ICON_KEYS, glossary_sections, wrap_icon
 
-    items = []
-    for key, info in KEYWORDS.items():
-        if key in ICON_KEYS:
-            inner = Markup(
-                f'<img src="/static/img/{key}.png" alt="" class="kw-img" width="28" height="28"> '
-                f"{escape(info['title'])}"
-            )
-        else:
-            inner = Markup(escape(info["title"]))
-        items.append(
-            {
-                "key": key,
-                "title": info["title"],
-                "tip": info["tip"],
-                "title_html": wrap_icon(inner, key),
-            }
-        )
-    return page(request, "glossar.html", keywords=items)
+    sections = []
+    for section in glossary_sections():
+        items = []
+        for item in section["entries"]:
+            key = item["key"]
+            if key in ICON_KEYS:
+                inner = Markup(
+                    f'<img src="/static/img/{key}.png" alt="" class="kw-img" width="28" height="28"> '
+                    f"{escape(item['title'])}"
+                )
+                title_html = wrap_icon(inner, key)
+            else:
+                title_html = Markup(escape(item["title"]))
+            items.append({**item, "title_html": title_html})
+        sections.append({"title": section["title"], "entries": items})
+    return page(request, "glossar.html", sections=sections)
 
 
 @app.get("/card/{card_id}", response_class=HTMLResponse)

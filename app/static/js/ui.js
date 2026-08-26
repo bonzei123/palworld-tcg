@@ -3,6 +3,35 @@
     const chatPanel = document.getElementById("chat-panel");
     const chatToggle = document.getElementById("chat-toggle");
     const tabChat = document.getElementById("tab-chat");
+    const tabMore = document.getElementById("tab-more");
+    const moreSheet = document.getElementById("more-sheet");
+    const moreClose = document.getElementById("more-sheet-close");
+
+    function setMoreOpen(open) {
+        if (!moreSheet || !tabMore) return;
+        moreSheet.hidden = !open;
+        tabMore.setAttribute("aria-expanded", String(open));
+        tabMore.classList.toggle("is-active", open);
+        document.body.classList.toggle("more-open", open);
+    }
+
+    tabMore?.addEventListener("click", () => {
+        const willOpen = moreSheet?.hidden;
+        if (willOpen && isChatOpen() && chatToggle) chatToggle.click();
+        setMoreOpen(Boolean(willOpen));
+    });
+    moreClose?.addEventListener("click", () => setMoreOpen(false));
+    moreSheet?.addEventListener("click", (e) => {
+        if (e.target === moreSheet) setMoreOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") setMoreOpen(false);
+    });
+    document.addEventListener("click", (e) => {
+        document.querySelectorAll("details.nav-more[open]").forEach((d) => {
+            if (!d.contains(e.target)) d.removeAttribute("open");
+        });
+    });
 
     function setChatOpen(open) {
         document.documentElement.classList.toggle("chat-open", open);
@@ -21,7 +50,10 @@
     if (chatToggle) {
         const orig = chatToggle.onclick;
         chatToggle.addEventListener("click", () => {
-            requestAnimationFrame(() => setChatOpen(isChatOpen()));
+            requestAnimationFrame(() => {
+                setChatOpen(isChatOpen());
+                if (isChatOpen()) setMoreOpen(false);
+            });
         });
         void orig;
     }
@@ -79,6 +111,27 @@
         const n = String(color || "").trim().toLowerCase();
         if (!n || n === "colorless" || n === "farblos") return "colorless";
         return n.replace(/[^a-z0-9]+/g, "");
+    }
+
+    let GLOSSARY = {};
+    try {
+        GLOSSARY = JSON.parse(document.getElementById("glossary-terms")?.textContent || "{}");
+    } catch {
+        GLOSSARY = {};
+    }
+
+    function termInfo(label) {
+        const raw = String(label || "").replace(/[≪≫«»]/g, "").trim();
+        const compact = raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
+        return GLOSSARY[compact] || GLOSSARY[raw.toLowerCase()] || null;
+    }
+
+    function termPill(label, extraClass, display) {
+        const shown = display == null ? label : display;
+        const info = termInfo(label);
+        if (!info) return esc(shown);
+        const cls = ["kw", extraClass].filter(Boolean).join(" ");
+        return `<a class="${esc(cls)}" href="/glossar#${esc(info.key)}" data-kw="${esc(info.key)}" data-title="${esc(info.title)}" data-tip="${esc(info.tip)}">${esc(shown)}</a>`;
     }
 
     function hoverNode(el) {
@@ -431,10 +484,10 @@
         const pills = [
             card.card_type, card.subtype, card.color, ...(card.attributes || []),
         ].filter(Boolean).map((p) => {
-            const cls = p === card.color ? ` class="color-${colorClass(p)}"` : "";
-            return `<li${cls}>${esc(p)}</li>`;
+            const cls = p === card.color ? `color-${colorClass(p)}` : "";
+            return `<li class="${cls}">${termPill(p)}</li>`;
         }).join("");
-        const apts = (card.aptitudes || []).map((a) => `<li class="apt">≪${esc(a)}≫</li>`).join("");
+        const apts = (card.aptitudes || []).map((a) => `<li class="apt">${termPill(a, "apt", `≪${a}≫`)}</li>`).join("");
         const stats = [
             card.cost != null ? ["Cost", card.cost] : null,
             card.power != null ? ["Power", card.power] : null,
@@ -561,7 +614,7 @@
     });
 
     bindArtZoom(document);
-    window.PalTCG = { showCard, showCardByCode, openCardView, colorClass, esc };
+    window.PalTCG = { showCard, showCardByCode, openCardView, colorClass, esc, termPill };
 
     const priceTip = document.getElementById("price-chart");
 
@@ -586,10 +639,10 @@
         const xs = vals.map((_, i) => padX + (i * (w - padX * 2)) / (vals.length - 1));
         const ys = vals.map((v) => padY + (1 - (v - min) / (max - min)) * (h - padY * 2));
         const pts = xs.map((x, i) => `${x.toFixed(1)},${ys[i].toFixed(1)}`).join(" ");
-        const dots = xs.map((x, i) => `<circle cx="${x.toFixed(1)}" cy="${ys[i].toFixed(1)}" r="3" fill="#9fe8b8"></circle>`).join("");
+        const dots = xs.map((x, i) => `<circle cx="${x.toFixed(1)}" cy="${ys[i].toFixed(1)}" r="3" fill="#ceaf73"></circle>`).join("");
         const legend = vals.map((v, i) => `${esc(labs[i] || "")} ${(v / 100).toFixed(2)}€`).join(" · ");
         return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
-            <polyline fill="none" stroke="#3ecf8e" stroke-width="2" points="${pts}"></polyline>
+            <polyline fill="none" stroke="#ceaf73" stroke-width="2" points="${pts}"></polyline>
             ${dots}
         </svg><p>${legend}</p>`;
     }
@@ -692,8 +745,12 @@
     document.addEventListener("click", (e) => {
         const el = e.target.closest?.(".kw");
         if (el) {
-            e.preventDefault();
             e.stopPropagation();
+            if (el.getAttribute("href") && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
+                hideKwTip();
+                return;
+            }
+            e.preventDefault();
             if (kwOpen === el && !kwTip?.hidden) hideKwTip();
             else showKwTip(el);
             return;
@@ -704,6 +761,7 @@
         if (e.key === "Escape") hideKwTip();
         const el = e.target.closest?.(".kw");
         if (!el) return;
+        if (e.key === "Enter" && el.getAttribute("href")) return;
         if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             if (kwOpen === el && !kwTip?.hidden) hideKwTip();

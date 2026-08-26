@@ -1,8 +1,7 @@
-const CACHE = "palworld-tcg-v12";
+const CACHE = "palworld-tcg-v15";
 const PRECACHE = [
   "/",
   "/offline",
-  "/glossar",
   "/static/css/app.css",
   "/static/js/app.js",
   "/static/js/ui.js",
@@ -11,6 +10,7 @@ const PRECACHE = [
   "/static/js/chat.js",
   "/static/js/offline.js",
   "/static/img/favicon.svg",
+  "/static/img/brand/logo.png",
   "/static/img/icon-512.png",
   "/manifest.webmanifest",
   "/api/catalog.json",
@@ -70,7 +70,7 @@ self.addEventListener("fetch", (event) => {
   }
   event.respondWith(
     fetch(req).then((res) => {
-      if (res.ok && (url.pathname === "/" || url.pathname.startsWith("/card/") || url.pathname === "/glossar")) {
+      if (res.ok && (url.pathname === "/" || url.pathname.startsWith("/card/"))) {
         const copy = res.clone();
         caches.open(CACHE).then((cache) => cache.put(req, copy));
       }

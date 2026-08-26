@@ -4,44 +4,45 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{% block title %}Palworld TCG{% endblock %}</title>
-    <meta name="theme-color" content="#0c1210" media="(prefers-color-scheme: dark)">
-    <meta name="theme-color" content="#0c1210">
-    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#1a1a1a">
+    <meta name="color-scheme" content="light">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="PalTCG">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="format-detection" content="telephone=no">
-    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1:wght@400;500;700;800&family=Oxanium:wght@500;600;700&display=swap">
+    <link rel="stylesheet" href="/static/css/app.css?v=15">
     <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/static/img/icon-512.png">
+    <link rel="apple-touch-icon" href="/static/img/brand/logo.png">
     <link rel="manifest" href="/manifest.webmanifest">
 </head>
 <body class="{% block body_class %}{% endblock %}" data-auth="{{ 1 if user else 0 }}">
-    <div class="grain" aria-hidden="true"></div>
     <header class="topbar">
         <a class="brand" href="/">
-            <span class="brand-mark" aria-hidden="true"></span>
-            <span>
-                <strong>Palworld TCG</strong>
-                <small>Lokaler Kartenkatalog</small>
-            </span>
+            <img src="/static/img/brand/logo.png" alt="Palworld Official Card Game">
         </a>
         <nav class="desk-nav" aria-label="Hauptmenü">
             <a href="/" class="{% if request.url.path == '/' %}is-active{% endif %}">Karten</a>
             <a href="/sammlung" class="{% if request.url.path.startswith('/sammlung') %}is-active{% endif %}">Sammlung</a>
             <a href="/decks" class="{% if request.url.path.startswith('/decks') %}is-active{% endif %}">Decks</a>
-            <a href="/glossar" class="{% if request.url.path.startswith('/glossar') %}is-active{% endif %}">Glossar</a>
-            <a href="/tausch" class="{% if request.url.path.startswith('/tausch') %}is-active{% endif %}">Tausch</a>
-            <a href="/booster" class="{% if request.url.path.startswith('/booster') %}is-active{% endif %}">Booster</a>
+            <details class="nav-more">
+                <summary>Mehr</summary>
+                <div class="nav-more-panel">
+                    <a href="/glossar" class="{% if request.url.path.startswith('/glossar') %}is-active{% endif %}">Glossar</a>
+                    <a href="/tausch" class="{% if request.url.path.startswith('/tausch') %}is-active{% endif %}">Tausch</a>
+                    <a href="/booster" class="{% if request.url.path.startswith('/booster') %}is-active{% endif %}">Booster</a>
+                    <a href="/admin" class="{% if request.url.path.startswith('/admin') %}is-active{% endif %}">Admin</a>
+                </div>
+            </details>
             {% if user %}
             <a href="/konto" class="{% if request.url.path.startswith('/konto') %}is-active{% endif %}">{{ user.username }}</a>
             {% else %}
             <a href="/konto" class="{% if request.url.path.startswith('/konto') %}is-active{% endif %}">Konto</a>
             {% endif %}
-            <a href="/admin" class="{% if request.url.path.startswith('/admin') %}is-active{% endif %}">Admin</a>
         </nav>
-        <a class="header-admin {% if request.url.path.startswith('/admin') %}is-active{% endif %}" href="/admin" title="Admin">Admin</a>
     </header>
     <main>
         {% block content %}{% endblock %}
@@ -59,15 +60,30 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10l3 16H4z"/><path d="M9 10h6M8 14h8"/></svg>
             <span>Decks</span>
         </a>
-        <a href="/konto" class="{% if request.url.path.startswith('/konto') %}is-active{% endif %}">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5 19c1.5-3.2 4-5 7-5s5.5 1.8 7 5"/></svg>
-            <span>{% if user %}Konto{% else %}Login{% endif %}</span>
-        </a>
+        <button type="button" class="tab-more" id="tab-more" aria-expanded="false" aria-controls="more-sheet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>
+            <span>Mehr</span>
+        </button>
         <button type="button" class="tab-chat" id="tab-chat" aria-controls="chat-panel">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14v10H8l-3 3z"/></svg>
             <span>Regeln</span>
         </button>
     </nav>
+    <div class="more-sheet" id="more-sheet" hidden>
+        <div class="more-sheet-card">
+            <header>
+                <strong>Mehr</strong>
+                <button type="button" class="icon-btn" id="more-sheet-close" aria-label="Schließen">✕</button>
+            </header>
+            <nav>
+                <a href="/konto">{% if user %}Konto · {{ user.username }}{% else %}Anmelden{% endif %}</a>
+                <a href="/glossar">Glossar</a>
+                <a href="/tausch">Tausch</a>
+                <a href="/booster">Booster</a>
+                <a href="/admin">Admin</a>
+            </nav>
+        </div>
+    </div>
     {% include "chat.html" %}
     <div class="modal card-view-modal" id="card-view-modal" hidden>
         <div class="modal-card card-view" role="dialog" aria-modal="true" aria-labelledby="card-view-title">
@@ -88,7 +104,8 @@
         <strong id="kw-tip-title"></strong>
         <p id="kw-tip-body"></p>
     </div>
-    <script src="/static/js/ui.js" defer></script>
+    <script type="application/json" id="glossary-terms">{{ glossary_json | safe }}</script>
+    <script src="/static/js/ui.js?v=15" defer></script>
     {% block scripts %}{% endblock %}
     <script>
         if ("serviceWorker" in navigator) {
