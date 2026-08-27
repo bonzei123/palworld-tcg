@@ -10,7 +10,7 @@ Es wird **nichts von einer Website geladen**. Du erstellst die HTML-Datei selbst
 docker compose up -d --build
 ```
 
-Im LAN: `http://NAS-IP:8080`
+Im LAN: `http://NAS-IP:8585`
 
 Admin-Passwort: Umgebungsvariable `ADMIN_PASSWORD` (Standard: `palworld`). Spieler legen unter `/konto` ein eigenes Konto an (Sammlung + Deckbuilder).
 
@@ -83,14 +83,14 @@ Solange `NAS_HOST` leer ist, überspringt der Deploy-Job — Watchtower reicht.
 Die App ist für **LAN oder VPN** gedacht, nicht fürs offene Internet.
 
 - Gemini-API-Key liegt nur in `data/palworld.db` (`settings.gemini_api_key`), nicht in der Compose-Datei.
-- Port 8080 nur intern binden. Nach außen: DSM **Reverse Proxy** mit HTTPS.
+- Nach außen Port **8585** (Compose mappt `8585:8080`). Im Container bleibt 8080. DSM **Reverse Proxy** mit HTTPS, wenn du eine Domain willst.
 - Hinter dem Proxy in der `.env` `HTTPS_ONLY=true` setzen (Secure-Cookies). Die App selbst spricht intern HTTP; HTTPS terminiert auf dem Reverse Proxy.
 - Wenn das NAS **kein Internet** hat, funktioniert der Katalog lokal. Der Chat beantwortet dann nur noch **gecachte** Fragen.
 
 Reverse-Proxy-Hinweise (DSM):
 
 - Quelle: `https://katalog.lan` (oder deine Zertifikats-Domain)
-- Ziel: `http://127.0.0.1:8080`
+- Ziel: `http://127.0.0.1:8585`
 - Header: `X-Forwarded-Proto` = `https`, `X-Forwarded-For` durchreichen
 - WebSocket nicht nötig
 
