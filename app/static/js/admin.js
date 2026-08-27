@@ -342,11 +342,21 @@ document.getElementById("clear-palworldcard")?.addEventListener("click", async (
 
 const usersBody = document.getElementById("users-body");
 if (usersBody) {
+    const status = document.getElementById("users-status");
+    const tempPw = document.getElementById("users-temp-pw");
+
+    function setUserStatus(text, ok) {
+        if (status) status.textContent = text || "";
+        if (tempPw) {
+            tempPw.hidden = !ok;
+            if (!ok) tempPw.replaceChildren();
+        }
+    }
+
     usersBody.addEventListener("change", async (e) => {
         const input = e.target.closest("[data-flag]");
         if (!input || input.tagName !== "INPUT") return;
         const tr = input.closest("tr");
-        const status = document.getElementById("users-status");
         const res = await fetch("/api/admin/users/" + tr.dataset.userId, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -355,13 +365,52 @@ if (usersBody) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
             input.checked = !input.checked;
-            if (status) status.textContent = data.detail || "Speichern fehlgeschlagen.";
+            setUserStatus(data.detail || "Speichern fehlgeschlagen.");
             return;
         }
-        if (status) status.textContent = "Gespeichert.";
+        setUserStatus("Gespeichert.");
         const selfRow = tr.querySelector(".muted")?.textContent?.includes("du");
         if (selfRow && input.dataset.flag === "is_admin" && !input.checked) {
             location.assign("/");
+        }
+    });
+
+    usersBody.addEventListener("click", async (e) => {
+        const resetBtn = e.target.closest("[data-reset-pw]");
+        const deleteBtn = e.target.closest("[data-delete-user]");
+        const tr = (resetBtn || deleteBtn)?.closest("tr");
+        if (!tr) return;
+        const name = tr.dataset.username || "diesen Benutzer";
+        const id = tr.dataset.userId;
+
+        if (resetBtn) {
+            if (!confirm("Neues Passwort für " + name + " erzeugen? Das alte gilt danach nicht mehr.")) return;
+            const res = await fetch("/api/admin/users/" + id + "/password", { method: "POST" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setUserStatus(data.detail || "Reset fehlgeschlagen.");
+                return;
+            }
+            setUserStatus("Neues Passwort für " + name + " — bitte kopieren und weitergeben.", true);
+            if (tempPw) {
+                const code = document.createElement("code");
+                code.textContent = data.password || "";
+                tempPw.replaceChildren(document.createTextNode("Passwort: "), code);
+                tempPw.hidden = false;
+            }
+            return;
+        }
+
+        if (deleteBtn) {
+            if (!confirm(name + " wirklich löschen? Sammlung, Decks und Verlauf dieses Kontos gehen mit weg.")) return;
+            const res = await fetch("/api/admin/users/" + id, { method: "DELETE" });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setUserStatus(data.detail || "Löschen fehlgeschlagen.");
+                return;
+            }
+            tr.remove();
+            setUserStatus(name + " gelöscht.");
         }
     });
 }

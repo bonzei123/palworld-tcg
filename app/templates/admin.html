@@ -71,8 +71,9 @@
     <div class="tab-panel" data-panel="users">
         <article class="panel">
             <h2>Benutzer &amp; Rechte</h2>
-            <p class="muted">Neue Konten sind nackt: Katalog, Sammlung, Decks. <strong>Regel</strong> schaltet den Chat frei, <strong>Admin</strong> zeigt dieses Panel (Passwort bleibt nötig).</p>
+            <p class="muted">Neue Konten sind nackt: Katalog, Sammlung, Decks. <strong>Regel</strong> schaltet den Chat frei, <strong>Admin</strong> zeigt dieses Panel (Passwort bleibt nötig). Ein Reset erzeugt ein neues Passwort — einmal anzeigen und weitergeben.</p>
             <p class="form-status" id="users-status"></p>
+            <p class="ok" id="users-temp-pw" hidden></p>
             <div class="table-wrap">
                 <table class="db-table" id="users-table">
                     <thead>
@@ -81,15 +82,24 @@
                             <th>Angelegt</th>
                             <th>Admin</th>
                             <th>Regel</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="users-body">
                         {% for u in users %}
-                        <tr data-user-id="{{ u.id }}">
+                        <tr data-user-id="{{ u.id }}" data-username="{{ u.username }}">
                             <td data-label="Konto"><strong>{{ u.username }}</strong>{% if u.id == user.id %} <span class="muted">du</span>{% endif %}</td>
                             <td data-label="Angelegt">{{ u.created_at }}</td>
                             <td data-label="Admin"><label class="check"><input type="checkbox" data-flag="is_admin"{% if u.is_admin %} checked{% endif %}></label></td>
                             <td data-label="Regel"><label class="check"><input type="checkbox" data-flag="can_rules"{% if u.can_rules %} checked{% endif %}></label></td>
+                            <td data-label="Aktionen">
+                                <div class="row-actions">
+                                    <button type="button" class="ghost" data-reset-pw>Passwort</button>
+                                    {% if u.id != user.id %}
+                                    <button type="button" class="danger-btn" data-delete-user>Löschen</button>
+                                    {% endif %}
+                                </div>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -261,6 +271,6 @@
 {% endblock %}
 {% block scripts %}
 {% if authed %}
-<script src="/static/js/admin.js?v=17" defer></script>
+<script src="/static/js/admin.js?v=19" defer></script>
 {% endif %}
 {% endblock %}

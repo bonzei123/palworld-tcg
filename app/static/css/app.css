@@ -281,6 +281,40 @@ input, textarea, select {
     -webkit-appearance: none;
     appearance: none;
 }
+input[type="checkbox"] {
+    width: 1.25rem;
+    height: 1.25rem;
+    min-width: 1.25rem;
+    min-height: 1.25rem;
+    padding: 0;
+    margin: 0;
+    flex: none;
+    display: inline-grid;
+    place-content: center;
+    border: 2px solid var(--ink);
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+}
+input[type="checkbox"]::after {
+    content: "";
+    width: 0.72rem;
+    height: 0.72rem;
+    transform: scale(0);
+    background: var(--gold);
+    clip-path: polygon(14% 44%, 0 65%, 40% 100%, 100% 18%, 80% 0, 38% 62%);
+}
+input[type="checkbox"]:checked {
+    background: var(--header);
+    border-color: var(--header);
+}
+input[type="checkbox"]:checked::after {
+    transform: scale(1);
+}
+input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
 .searchbar input { border: 0; background: transparent; border-radius: 999px; min-height: 42px; }
 button, .ghost {
     font: inherit;
@@ -913,6 +947,8 @@ button:disabled { opacity: 0.55; cursor: wait; }
     .db-table td:first-child { justify-content: flex-start; }
     .db-table td[data-label=""]:last-child { display: block; }
     .db-table td[data-label=""]:last-child button { width: 100%; }
+    .db-table td[data-label="Aktionen"] { display: block; }
+    .db-table td[data-label="Aktionen"] .row-actions { justify-content: flex-end; margin-top: 0.25rem; }
     .db-table img { width: 48px; height: 68px; }
     .db-table input[type=number] { width: 5.5rem; min-height: var(--touch); }
 }
@@ -961,6 +997,16 @@ button:disabled { opacity: 0.55; cursor: wait; }
 .illegal-list { color: #b42318; }
 .tag-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.6rem; }
 .check { display: flex; align-items: center; gap: 0.35rem; color: var(--ink); }
+.row-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; }
+.row-actions button { min-height: 34px; padding: 0.2rem 0.7rem; font-size: 0.72rem; }
+#users-temp-pw code {
+    display: inline-block;
+    margin-left: 0.25rem;
+    padding: 0.15rem 0.4rem;
+    background: #fff;
+    border: 1px solid var(--line);
+    user-select: all;
+}
 .trade-card h3 { margin: 0.8rem 0 0.3rem; font-size: 0.9rem; color: var(--muted); }
 .booster-grid { margin-top: 1rem; }
 .color-check li.warn, .color-check .warn { color: var(--gold); }

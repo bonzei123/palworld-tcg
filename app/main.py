@@ -21,9 +21,11 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from .auth import (
     can_open_admin,
     current_user,
+    delete_user,
     grant_admin,
     list_users,
     require_rules,
+    reset_user_password,
     set_user_flags,
     template_globals,
 )
@@ -423,6 +425,38 @@ async def admin_user_patch(request: Request, user_id: int):
     if actor and int(actor["id"]) == int(user_id) and not rec.get("is_admin"):
         request.session.pop("admin", None)
     return {"ok": True, **rec}
+
+
+@app.delete("/api/admin/users/{user_id}")
+def admin_user_delete(request: Request, user_id: int):
+    actor = current_user(request)
+    _require_admin(request)
+    try:
+        delete_user(user_id, actor_id=int(actor["id"]))
+    except KeyError:
+        raise HTTPException(404, "Benutzer nicht gefunden") from None
+    except ValueError as exc:
+        if str(exc) == "self":
+            raise HTTPException(400, "Eigenes Konto kannst du nicht löschen.") from None
+        raise HTTPException(400, "Mindestens ein Admin muss bleiben.") from None
+    return {"ok": True}
+
+
+@app.post("/api/admin/users/{user_id}/password")
+async def admin_user_password(request: Request, user_id: int):
+    _require_admin(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    raw = body.get("password") if isinstance(body, dict) else None
+    try:
+        password = reset_user_password(user_id, raw if isinstance(raw, str) else None)
+    except KeyError:
+        raise HTTPException(404, "Benutzer nicht gefunden") from None
+    except ValueError:
+        raise HTTPException(400, "Passwort mindestens 8 Zeichen.") from None
+    return {"ok": True, "password": password}
 
 
 def _fts_query(q: str) -> str:

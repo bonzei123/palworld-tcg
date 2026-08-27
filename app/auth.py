@@ -124,6 +124,41 @@ def set_user_flags(user_id: int, *, is_admin: bool | None = None, can_rules: boo
     return _user_from_row(updated)
 
 
+def delete_user(user_id: int, *, actor_id: int) -> None:
+    if int(user_id) == int(actor_id):
+        raise ValueError("self")
+    with get_db() as conn:
+        row = conn.execute(f"{USER_SELECT} WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            raise KeyError("user")
+        if row["is_admin"]:
+            others = conn.execute(
+                "SELECT COUNT(*) AS n FROM users WHERE IFNULL(is_admin, 0) = 1 AND id != ?",
+                (user_id,),
+            ).fetchone()["n"]
+            if int(others or 0) == 0:
+                raise ValueError("last_admin")
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
+
+def reset_user_password(user_id: int, password: str | None = None) -> str:
+    pw = (password or "").strip()
+    if not pw:
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+        pw = "".join(secrets.choice(alphabet) for _ in range(12))
+    elif len(pw) < 8:
+        raise ValueError("short")
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            raise KeyError("user")
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (hash_password(pw), user_id),
+        )
+    return pw
+
+
 def register_user(username: str, password: str) -> tuple[int | None, str | None]:
     username = (username or "").strip()
     if not USER_RE.match(username):
