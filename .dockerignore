@@ -1,9 +1,12 @@
-data/
 .git
-.venv
-venv
+.github
+.idea
+data
 __pycache__
 *.pyc
+.venv
+venv
 .env
-README.md
-.cursor
+cardlists
+*.md
+deploy

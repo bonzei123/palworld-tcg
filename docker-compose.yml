@@ -1,5 +1,6 @@
 services:
   palworld-tcg:
+    image: ghcr.io/bonzei123/palworld-tcg:latest
     build: .
     container_name: palworld-tcg
     ports:
@@ -9,13 +10,30 @@ services:
     environment:
       DATA_DIR: /data
       SEED_DIR: /seed
-      ADMIN_PASSWORD: palworld
-      SECRET_KEY: change-me-on-the-nas
-      HTTPS_ONLY: "false"
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-palworld}
+      SECRET_KEY: ${SECRET_KEY:-change-me-on-the-nas}
+      HTTPS_ONLY: ${HTTPS_ONLY:-false}
     restart: unless-stopped
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
       interval: 30s
       timeout: 5s
       retries: 5
       start_period: 120s
+
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    profiles: ["nas"]
+    container_name: palworld-tcg-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_CONFIG_FILE:-/root/.docker/config.json}:/config.json:ro
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_POLL_INTERVAL: 120
+      WATCHTOWER_INCLUDE_STOPPED: "false"
+      DOCKER_CONFIG: /
+    restart: unless-stopped

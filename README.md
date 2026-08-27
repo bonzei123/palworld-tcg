@@ -4,7 +4,7 @@ Private Katalog-App für das Palworld Trading Card Game. Läuft auf einem Synolo
 
 Es wird **nichts von einer Website geladen**. Du erstellst die HTML-Datei selbst und importierst sie im Admin.
 
-## Start
+## Start (lokal)
 
 ```bash
 docker compose up -d --build
@@ -13,6 +13,60 @@ docker compose up -d --build
 Im LAN: `http://NAS-IP:8080`
 
 Admin-Passwort: Umgebungsvariable `ADMIN_PASSWORD` (Standard: `palworld`). Spieler legen unter `/konto` ein eigenes Konto an (Sammlung + Deckbuilder).
+
+## Auto-Deploy aufs Synology
+
+Bei jedem Push auf `main` baut GitHub Actions ein Image (`linux/amd64` und `arm64`) und legt es nach `ghcr.io/bonzei123/palworld-tcg`. Die Datenbank und Bilder bleiben im Volume `./data` — ein Image-Update überschreibt die Sammlung nicht.
+
+**Empfohlen:** Watchtower auf dem NAS holt das neue Image selbst. GitHub muss das NAS nicht erreichen (kein Port-Forward für SSH).
+
+### 1. Einmalig auf GitHub
+
+- Repo → **Settings → Actions → General**: Workflows dürfen Packages schreiben (Standard bei `GITHUB_TOKEN` + `packages: write` im Workflow).
+- Nach dem ersten erfolgreichen Workflow: **Packages** → `palworld-tcg` → Package settings → dem GitHub-Account Leserecht geben, mit dem sich das NAS anmeldet.
+
+### 2. Einmalig auf dem NAS
+
+Ordner z. B. `/volume1/docker/palworld-tcg` mit `docker-compose.yml` und `.env` (von `.env.example` kopieren, Passwort und `SECRET_KEY` setzen).
+
+Privates GHCR-Login (Personal Access Token mit `read:packages`):
+
+```bash
+echo DEIN_TOKEN | docker login ghcr.io -u GITHUB_USERNAME --password-stdin
+```
+
+Erstes Starten (zieht das Image, startet die App **und** Watchtower):
+
+```bash
+cd /volume1/docker/palworld-tcg
+docker compose --profile nas pull
+docker compose --profile nas up -d
+```
+
+Watchtower prüft alle 2 Minuten, ob `:latest` neu ist, zieht es und startet den Container neu.
+
+Falls `config.json` nicht unter `/root/.docker/` liegt, in der `.env` setzen: `DOCKER_CONFIG_FILE=/var/services/homes/DEINUSER/.docker/config.json`.
+
+Ohne Watchtower geht auch eine **DSM-Aufgabe** (Aufgabenplaner, alle 2 Minuten, Benutzer mit Docker-Recht):
+
+```bash
+/volume1/docker/palworld-tcg/deploy/nas-update.sh
+```
+
+(`chmod +x deploy/nas-update.sh`)
+
+### 3. Optional: sofort per SSH nach dem Push
+
+Nur wenn GitHub das NAS per SSH erreicht (Tailscale, VPN, nicht Port 22 ins Internet). Unter **Settings → Secrets and variables → Actions**:
+
+| Art | Name | Beispiel |
+| --- | --- | --- |
+| Variable | `NAS_HOST` | `100.x.x.x` (Tailscale) |
+| Variable | `NAS_USER` | `florian` |
+| Variable | `NAS_COMPOSE_DIR` | `/volume1/docker/palworld-tcg` |
+| Secret | `NAS_SSH_KEY` | privater Schlüssel ohne Passphrase |
+
+Solange `NAS_HOST` leer ist, überspringt der Deploy-Job — Watchtower reicht.
 
 ## Was die App kann
 
@@ -30,7 +84,7 @@ Die App ist für **LAN oder VPN** gedacht, nicht fürs offene Internet.
 
 - Gemini-API-Key liegt nur in `data/palworld.db` (`settings.gemini_api_key`), nicht in der Compose-Datei.
 - Port 8080 nur intern binden. Nach außen: DSM **Reverse Proxy** mit HTTPS.
-- Hinter dem Proxy in der Compose `HTTPS_ONLY=true` setzen (Secure-Cookies). Die App selbst spricht intern HTTP; HTTPS terminiert auf dem Reverse Proxy.
+- Hinter dem Proxy in der `.env` `HTTPS_ONLY=true` setzen (Secure-Cookies). Die App selbst spricht intern HTTP; HTTPS terminiert auf dem Reverse Proxy.
 - Wenn das NAS **kein Internet** hat, funktioniert der Katalog lokal. Der Chat beantwortet dann nur noch **gecachte** Fragen.
 
 Reverse-Proxy-Hinweise (DSM):
