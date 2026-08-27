@@ -14,12 +14,12 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+1:wght@400;500;700;800&family=Oxanium:wght@500;600;700&display=swap">
-    <link rel="stylesheet" href="/static/css/app.css?v=16">
+    <link rel="stylesheet" href="/static/css/app.css?v=18">
     <link rel="icon" href="/static/img/favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/static/img/brand/logo.png">
     <link rel="manifest" href="/manifest.webmanifest">
 </head>
-<body class="{% block body_class %}{% endblock %}" data-auth="{{ 1 if user else 0 }}">
+<body class="{% block body_class %}{% endblock %}{% if not can_rules %} no-chat{% endif %}" data-auth="{{ 1 if user else 0 }}">
     <header class="topbar">
         <a class="brand" href="/">
             <img src="/static/img/brand/logo.png" alt="Palworld Official Card Game">
@@ -34,7 +34,9 @@
                     <a href="/glossar" class="{% if request.url.path.startswith('/glossar') %}is-active{% endif %}">Glossar</a>
                     <a href="/tausch" class="{% if request.url.path.startswith('/tausch') %}is-active{% endif %}">Tausch</a>
                     <a href="/booster" class="{% if request.url.path.startswith('/booster') %}is-active{% endif %}">Booster</a>
+                    {% if show_admin %}
                     <a href="/admin" class="{% if request.url.path.startswith('/admin') %}is-active{% endif %}">Admin</a>
+                    {% endif %}
                 </div>
             </details>
             {% if user %}
@@ -64,10 +66,12 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>
             <span>Mehr</span>
         </button>
+        {% if can_rules %}
         <button type="button" class="tab-chat" id="tab-chat" aria-controls="chat-panel">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14v10H8l-3 3z"/></svg>
             <span>Regeln</span>
         </button>
+        {% endif %}
     </nav>
     <div class="more-sheet" id="more-sheet" hidden>
         <div class="more-sheet-card">
@@ -80,11 +84,13 @@
                 <a href="/glossar">Glossar</a>
                 <a href="/tausch">Tausch</a>
                 <a href="/booster">Booster</a>
-                <a href="/admin">Admin</a>
+                {% if show_admin %}<a href="/admin">Admin</a>{% endif %}
             </nav>
         </div>
     </div>
+    {% if can_rules %}
     {% include "chat.html" %}
+    {% endif %}
     <div class="modal card-view-modal" id="card-view-modal" hidden>
         <div class="modal-card card-view" role="dialog" aria-modal="true" aria-labelledby="card-view-title">
             <header>
@@ -105,7 +111,7 @@
         <p id="kw-tip-body"></p>
     </div>
     <script type="application/json" id="glossary-terms">{{ glossary_json | safe }}</script>
-    <script src="/static/js/ui.js?v=16" defer></script>
+    <script src="/static/js/ui.js?v=17" defer></script>
     {% block scripts %}{% endblock %}
     <script>
         if ("serviceWorker" in navigator) {

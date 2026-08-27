@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from .activity import list_activity
-from .auth import current_user, login_user, register_user, require_user
+from .auth import current_user, login_user, register_user, require_user, template_globals
 from .db import get_db, get_setting
 from .player import (
     collection_locations,
@@ -54,8 +54,7 @@ def register_player_routes(app, templates: Jinja2Templates) -> None:
             name,
             {
                 "request": request,
-                "user": current_user(request),
-                "is_admin": bool(request.session.get("admin")),
+                **template_globals(request),
                 **ctx,
             },
         )

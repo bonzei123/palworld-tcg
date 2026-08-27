@@ -1,10 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Admin · Palworld TCG{% endblock %}
 {% block content %}
-{% if not authed %}
+{% if denied %}
+<section class="admin-login">
+    <h1>Kein Zugriff</h1>
+    <p>Das Admin-Panel sehen nur Konten mit dem Haken <strong>Admin</strong>.</p>
+    <p class="muted"><a href="/">Zurück zum Katalog</a></p>
+</section>
+{% elif not authed %}
 <section class="admin-login">
     <h1>Admin</h1>
-    <p>Passwort steht in der Docker-Umgebungsvariable <code>ADMIN_PASSWORD</code> (Standard: <code>palworld</code>).</p>
+    {% if admin_setup %}
+    <p>Noch kein Admin-Konto. Mit dem Admin-Passwort wird <strong>{{ user.username }}</strong> der erste Admin.</p>
+    {% else %}
+    <p>Dein Konto hat das Admin-Recht. Das Passwort steht in <code>ADMIN_PASSWORD</code> (Standard: <code>palworld</code>) und schützt die Steuerung extra.</p>
+    {% endif %}
     {% if error %}<p class="error">{{ error }}</p>{% endif %}
     <form method="post" action="/admin/login">
         <label>Passwort
@@ -25,6 +35,7 @@
 
     <nav class="tabs" id="admin-tabs">
         <button type="button" class="is-active" data-tab="cards">Karten</button>
+        <button type="button" data-tab="users">Benutzer</button>
         <button type="button" data-tab="import">HTML-Import</button>
         <button type="button" data-tab="editions">Editionen</button>
         <button type="button" data-tab="settings">Einstellungen</button>
@@ -54,6 +65,36 @@
                 </table>
             </div>
             <div class="pager" id="db-pager"></div>
+        </article>
+    </div>
+
+    <div class="tab-panel" data-panel="users">
+        <article class="panel">
+            <h2>Benutzer &amp; Rechte</h2>
+            <p class="muted">Neue Konten sind nackt: Katalog, Sammlung, Decks. <strong>Regel</strong> schaltet den Chat frei, <strong>Admin</strong> zeigt dieses Panel (Passwort bleibt nötig).</p>
+            <p class="form-status" id="users-status"></p>
+            <div class="table-wrap">
+                <table class="db-table" id="users-table">
+                    <thead>
+                        <tr>
+                            <th>Konto</th>
+                            <th>Angelegt</th>
+                            <th>Admin</th>
+                            <th>Regel</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-body">
+                        {% for u in users %}
+                        <tr data-user-id="{{ u.id }}">
+                            <td data-label="Konto"><strong>{{ u.username }}</strong>{% if u.id == user.id %} <span class="muted">du</span>{% endif %}</td>
+                            <td data-label="Angelegt">{{ u.created_at }}</td>
+                            <td data-label="Admin"><label class="check"><input type="checkbox" data-flag="is_admin"{% if u.is_admin %} checked{% endif %}></label></td>
+                            <td data-label="Regel"><label class="check"><input type="checkbox" data-flag="can_rules"{% if u.can_rules %} checked{% endif %}></label></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </article>
     </div>
 
@@ -220,6 +261,6 @@
 {% endblock %}
 {% block scripts %}
 {% if authed %}
-<script src="/static/js/admin.js?v=13" defer></script>
+<script src="/static/js/admin.js?v=17" defer></script>
 {% endif %}
 {% endblock %}

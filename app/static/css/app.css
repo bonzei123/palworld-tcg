@@ -137,6 +137,7 @@ h1, h2, h3, .kicker, .desk-nav, .tabbar {
     padding: 0.2rem 0.2rem calc(0.25rem + env(safe-area-inset-bottom, 0px));
     user-select: none;
 }
+body.no-chat .tabbar { grid-template-columns: repeat(4, 1fr); }
 .tabbar a, .tabbar button {
     display: flex;
     flex-direction: column;
@@ -560,7 +561,15 @@ button:disabled { opacity: 0.55; cursor: wait; }
     color: var(--muted);
 }
 
-.admin-grid, .account-grid {
+.account .lede { margin-bottom: 0.6rem; }
+.rights-list {
+    margin: 0 0 1rem;
+    padding-left: 1.2rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+.rights-list li { margin: 0.2rem 0; }
+.account-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;

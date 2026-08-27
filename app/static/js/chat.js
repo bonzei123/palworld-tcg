@@ -1,5 +1,6 @@
 (function () {
 const root = document.getElementById("chat-root");
+if (!root) return;
 const panel = document.getElementById("chat-panel");
 const toggle = document.getElementById("chat-toggle");
 const closeBtn = document.getElementById("chat-close");

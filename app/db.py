@@ -490,6 +490,8 @@ CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    can_rules INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -778,6 +780,8 @@ def init_db() -> None:
         _ensure_column(conn, "collection", "for_trade", "INTEGER DEFAULT 0")
         _ensure_column(conn, "collection", "notes", "TEXT DEFAULT ''")
         _ensure_column(conn, "pulls", "foil", "INTEGER DEFAULT 0")
+        _ensure_column(conn, "users", "is_admin", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "users", "can_rules", "INTEGER NOT NULL DEFAULT 0")
         _drop_foil_dimension(conn)
         conn.commit()
         fts_n = conn.execute("SELECT COUNT(*) AS n FROM cards_fts").fetchone()["n"]

@@ -339,3 +339,29 @@ document.getElementById("clear-palworldcard")?.addEventListener("click", async (
     });
     location.reload();
 });
+
+const usersBody = document.getElementById("users-body");
+if (usersBody) {
+    usersBody.addEventListener("change", async (e) => {
+        const input = e.target.closest("[data-flag]");
+        if (!input || input.tagName !== "INPUT") return;
+        const tr = input.closest("tr");
+        const status = document.getElementById("users-status");
+        const res = await fetch("/api/admin/users/" + tr.dataset.userId, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ [input.dataset.flag]: input.checked }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            input.checked = !input.checked;
+            if (status) status.textContent = data.detail || "Speichern fehlgeschlagen.";
+            return;
+        }
+        if (status) status.textContent = "Gespeichert.";
+        const selfRow = tr.querySelector(".muted")?.textContent?.includes("du");
+        if (selfRow && input.dataset.flag === "is_admin" && !input.checked) {
+            location.assign("/");
+        }
+    });
+}

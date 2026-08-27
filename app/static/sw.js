@@ -1,4 +1,4 @@
-const CACHE = "palworld-tcg-v16";
+const CACHE = "palworld-tcg-v18";
 const PRECACHE = [
   "/",
   "/offline",

@@ -18,7 +18,15 @@ from pypdf import PdfReader
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from .auth import current_user
+from .auth import (
+    can_open_admin,
+    current_user,
+    grant_admin,
+    list_users,
+    require_rules,
+    set_user_flags,
+    template_globals,
+)
 from .chat import ask_gemini
 from .config import (
     ADMIN_PASSWORD,
@@ -83,8 +91,7 @@ def page(request: Request, name: str, **ctx: Any) -> HTMLResponse:
         name,
         {
             "request": request,
-            "user": current_user(request),
-            "is_admin": bool(request.session.get("admin")),
+            **template_globals(request),
             **ctx,
         },
     )
@@ -155,6 +162,9 @@ def _logged_in(request: Request) -> bool:
 
 
 def _require_admin(request: Request) -> None:
+    user = current_user(request)
+    if not can_open_admin(user):
+        raise HTTPException(403, "Kein Admin-Recht.")
     if not _logged_in(request):
         raise HTTPException(401, "Nicht angemeldet")
 
@@ -311,8 +321,13 @@ def compare_page(request: Request, card_id: int) -> HTMLResponse:
 
 @app.get("/admin", response_class=HTMLResponse)
 def admin_page(request: Request) -> HTMLResponse:
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/konto?next=/admin", status_code=303)
+    if not can_open_admin(user):
+        return page(request, "admin.html", authed=False, denied=True, error=None)
     if not _logged_in(request):
-        return page(request, "admin.html", authed=False, error=None)
+        return page(request, "admin.html", authed=False, denied=False, error=None)
     with get_db() as conn:
         key = get_setting(conn, "gemini_api_key") or ""
         model = get_setting(conn, "gemini_model") or GEMINI_DEFAULT_MODEL
@@ -359,25 +374,55 @@ def admin_page(request: Request) -> HTMLResponse:
         palworldcard_identity_masked=pw_masked,
         has_palworldcard=bool(pw_id),
         prices_synced_at=prices_synced_at,
+        users=list_users(),
     )
 
 
 @app.post("/admin/login")
 async def admin_login(request: Request, password: str = Form(...)):
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/konto?next=/admin", status_code=303)
+    if not can_open_admin(user):
+        return page(request, "admin.html", authed=False, denied=True, error=None)
     if secrets.compare_digest(password, ADMIN_PASSWORD):
+        if not user.get("is_admin"):
+            grant_admin(user["id"])
         request.session["admin"] = True
         return RedirectResponse("/admin", status_code=303)
-    return templates.TemplateResponse(
-        "admin.html",
-        {"request": request, "user": current_user(request), "authed": False, "error": "Falsches Passwort."},
-        status_code=401,
-    )
+    return page(request, "admin.html", authed=False, denied=False, error="Falsches Passwort.")
 
 
 @app.post("/admin/logout")
 async def admin_logout(request: Request):
     request.session.pop("admin", None)
     return RedirectResponse("/admin", status_code=303)
+
+
+@app.get("/api/admin/users")
+def admin_users(request: Request):
+    _require_admin(request)
+    return {"items": list_users()}
+
+
+@app.patch("/api/admin/users/{user_id}")
+async def admin_user_patch(request: Request, user_id: int):
+    actor = current_user(request)
+    _require_admin(request)
+    body = await request.json()
+    try:
+        rec = set_user_flags(
+            user_id,
+            is_admin=body["is_admin"] if "is_admin" in body else None,
+            can_rules=body["can_rules"] if "can_rules" in body else None,
+        )
+    except KeyError:
+        raise HTTPException(404, "Benutzer nicht gefunden") from None
+    except ValueError:
+        raise HTTPException(400, "Mindestens ein Admin muss bleiben.") from None
+    if actor and int(actor["id"]) == int(user_id) and not rec.get("is_admin"):
+        request.session.pop("admin", None)
+    return {"ok": True, **rec}
 
 
 def _fts_query(q: str) -> str:
@@ -750,6 +795,7 @@ def offline_page(request: Request) -> HTMLResponse:
 
 @app.post("/api/chat")
 async def api_chat(request: Request):
+    require_rules(request)
     body = await request.json()
     message = (body.get("message") or "").strip()
     history = body.get("history") or []
