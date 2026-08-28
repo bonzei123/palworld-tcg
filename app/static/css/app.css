@@ -1165,28 +1165,51 @@ body.modal-open { overflow: hidden; }
 .activity-list {
     list-style: none;
     padding: 0;
-    margin: 0.8rem 0 0;
+    margin: 0.55rem 0 0;
 }
 .activity-list li {
-    display: grid;
-    grid-template-columns: 52px 1fr;
-    gap: 0.7rem;
+    display: flex;
     align-items: center;
-    padding: 0.55rem 0;
+    gap: 0.45rem;
+    padding: 0.16rem 0;
     border-bottom: 1px solid var(--line);
 }
-.activity-list p { margin: 0; }
-.activity-list time { color: var(--muted); font-size: 0.78rem; font-family: var(--mono); }
+.activity-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+}
+.activity-list p {
+    margin: 0;
+    min-width: 0;
+    font-size: 0.84rem;
+    line-height: 1.25;
+}
+.activity-list p .badge { margin-left: 0.25rem; vertical-align: middle; }
+.activity-list time {
+    flex: none;
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-family: var(--mono);
+    white-space: nowrap;
+}
 .activity-thumb {
-    width: 52px;
-    height: 72px;
+    width: 30px;
+    height: 42px;
+    flex: none;
     display: block;
     overflow: hidden;
-    border-radius: 6px;
+    border-radius: 3px;
     background: #1a1a1a;
 }
 .activity-thumb img { width: 100%; height: 100%; object-fit: contain; }
 .activity-thumb.empty { background: #ddd3bf; }
+@media (max-width: 560px) {
+    .activity-body { gap: 0.45rem; }
+}
 .card-code-link {
     display: inline;
     padding: 0;

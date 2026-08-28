@@ -32,7 +32,7 @@
             {% else %}
             <span class="activity-thumb empty"></span>
             {% endif %}
-            <div>
+            <div class="activity-body">
                 <p>
                     {% if ev.card_id %}
                     <a href="/card/{{ ev.card_id }}">{{ ev.summary }}</a>
@@ -41,7 +41,7 @@
                     {% endif %}
                     {% if ev.foil %}<span class="badge foil">Foil</span>{% endif %}
                 </p>
-                <time datetime="{{ ev.created_at }}">{{ ev.created_at }}</time>
+                <time datetime="{{ ev.created_at }}">{{ ev.when }}</time>
             </div>
         </li>
         {% endfor %}

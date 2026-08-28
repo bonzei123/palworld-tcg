@@ -67,6 +67,13 @@ def log_activity(
         _write(c)
 
 
+def _when(raw: str | None) -> str:
+    s = (raw or "").replace("T", " ")
+    if len(s) >= 16 and s[4] == "-" and s[7] == "-":
+        return f"{s[8:10]}.{s[5:7]}. {s[11:16]}"
+    return s
+
+
 def list_activity(user_id: int, limit: int = SHOW) -> list[dict[str, Any]]:
     limit = max(1, min(500, int(limit)))
     with get_db() as conn:
@@ -87,6 +94,7 @@ def list_activity(user_id: int, limit: int = SHOW) -> list[dict[str, Any]]:
     for row in rows:
         item = dict(row)
         item["foil"] = is_foil_printing(row["rarity"], row["card_code"])
+        item["when"] = _when(item.get("created_at"))
         path = row["image_path"]
         item["image_url"] = "/images/" + str(path).replace("\\", "/") if path else None
         items.append(item)
