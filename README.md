@@ -29,10 +29,18 @@ Bei jedem Push auf `main` baut GitHub Actions ein Image (`linux/amd64` und `arm6
 
 Ordner z. B. `/volume1/docker/palworld-tcg` mit `docker-compose.yml` und `.env` (von `.env.example` kopieren, Passwort und `SECRET_KEY` setzen).
 
-Privates GHCR-Login (Personal Access Token mit `read:packages`):
+Privates GHCR-Login (Personal Access Token mit `read:packages`). Danach die Datei ins Projekt kopieren — Watchtower liest `docker-config/config.json`, nicht `/root/.docker/`:
 
 ```bash
 echo DEIN_TOKEN | docker login ghcr.io -u GITHUB_USERNAME --password-stdin
+mkdir -p docker-config
+cp ~/.docker/config.json docker-config/config.json
+```
+
+Falls `~/.docker/config.json` fehlt, nach der Datei suchen:
+
+```bash
+find /var/services/homes /root /var/packages -name config.json 2>/dev/null | grep docker
 ```
 
 Erstes Starten (zieht das Image, startet die App **und** Watchtower):
@@ -44,8 +52,6 @@ docker compose up -d
 ```
 
 Watchtower prüft alle 2 Minuten, ob `:latest` neu ist, zieht es und startet den Container neu.
-
-Falls `config.json` nicht unter `/root/.docker/` liegt, in der `.env` setzen: `DOCKER_CONFIG_FILE=/var/services/homes/DEINUSER/.docker/config.json`.
 
 Ohne Watchtower geht auch eine **DSM-Aufgabe** (Aufgabenplaner, alle 2 Minuten, Benutzer mit Docker-Recht):
 

@@ -4,5 +4,6 @@ __pycache__/
 .env
 .venv/
 venv/
+docker-config/config.json
 *.egg-info/
 .DS_Store
