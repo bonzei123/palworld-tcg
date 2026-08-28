@@ -39,8 +39,8 @@ Erstes Starten (zieht das Image, startet die App **und** Watchtower):
 
 ```bash
 cd /volume1/docker/palworld-tcg
-docker compose --profile nas pull
-docker compose --profile nas up -d
+docker compose pull
+docker compose up -d
 ```
 
 Watchtower prüft alle 2 Minuten, ob `:latest` neu ist, zieht es und startet den Container neu.
